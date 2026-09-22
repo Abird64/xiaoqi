@@ -7,7 +7,7 @@
 > 技术上是健康数据工具，呈现上是一件**值得反复看的多媒体作品**。
 
 <p>
-<img alt="status" src="https://img.shields.io/badge/status-规划中-orange">
+<img alt="status" src="https://img.shields.io/badge/status-M1-开发中-brightgreen">
 <img alt="platform" src="https://img.shields.io/badge/platform-Windows-blue">
 <img alt="stack" src="https://img.shields.io/badge/stack-Python%20%2B%20Three.js-informational">
 <img alt="license" src="https://img.shields.io/badge/license-TBD-lightgrey">
@@ -105,17 +105,23 @@
 
 ## 项目状态
 
-**当前阶段：方案设计（尚未开始编码）**
+**当前阶段：M1 · 工具导通（W4，骨架开工中）**
 
 - [x] 项目定名 **小栖**，一句话需求 **陪伴式集中展示多源健康数据**
 - [x] 平台确定 **Windows + 外置 USB 摄像头**
-- [x] 手机端多源数据接入路线定案：**协议优先、客户端零开发**
-- [ ] 应用使用记录保留程度（倾向轻量保留）
-- [ ] 美术风格参考（low-poly / 粘土风）待找参考图
-- [ ] 项目骨架与 M1 实现
+- [x] 手机端接入路线定案：**协议优先、客户端零开发**（D-002）
+- [x] 文档分层定案：**GitHub 只留技术，进度/分工进腾讯文档**（D-006）
+- [x] 代码目录结构 + 单进程进程模型 + 交付形态（D-007）
+- [ ] 接口协议 v0.1 冻结（XQ-002，9/24）
+- [ ] 项目骨架与 M1 六条验收标准
+- [ ] 美术风格参考（low-poly / 粘土风，XQ-006）
 
 ---
 
 ## 文档
 
-项目的需求、设计与调研文档目前维护在个人的 Obsidian 知识库中，本仓库后续将承接代码与面向开发的设计文档。
+| 去哪 | 看什么 |
+|---|---|
+| **[`docs/`](docs/README.md)** | 技术层：系统架构、接口协议、需求与验收标准、决策记录 |
+| **腾讯文档**〈链接待补〉 | 进度层：看板、分工、周会记录、交付清单 |
+| 作者的 Obsidian 知识库 | 个人课程材料（**不进本仓库**，代码与知识库分离） |
