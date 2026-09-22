@@ -1,0 +1,43 @@
+# 小栖配置（M2-2 要求：改这里就能调，不用改代码）
+# 本地覆盖放 config.local.yaml（已 gitignore 不生效时可直接改本文件）
+
+server:
+  host: 0.0.0.0          # 手机与电脑需同一 Wi-Fi，只监听局域网
+  port: 8000
+
+camera:
+  index: 0               # USB 摄像头编号
+  width: 640
+  height: 480
+  fps: 30
+
+posture:
+  # 判定阈值：相对校准基准的**增量**（个性化，由 calibration 采样定基线）
+  neck_delta_deg: 15.0       # 头前倾角比基准大这么多 → slouch
+  hunch_delta_deg: 28.0      # 再大 → desk_hunch
+  min_confidence: 0.55       # 低于此置信度 → unknown
+  absent_sec: 1.5            # 连续无人这么久 → away
+  sample_hz: 10              # 推理降采样：摄像头 30fps，判定 10Hz 足够
+
+debounce:                    # 防抖：候选状态要持续这么久才真正切换（M2-5）
+  default_sec: 2.0
+  unknown_sec: 1.0
+  away_sec: 4.0
+  upright_sec: 1.5
+
+refresh_sec: 10              # 同状态重复推送间隔（带 sustained_sec，仍 ≤1 条/秒）
+
+reminder:
+  water_sec: 1800            # 30 分钟喝水
+  standup_sec: 1800          # 30 分钟久坐起身
+
+phone:
+  token: ""                  # 留空 = 启动生成并打印/出二维码
+  dedup_window_sec: 60       # 幂等窗口
+  stale_sec: 900             # 超过 15 分钟未更新 → stale=true
+
+storage:
+  path: data/xiaoqi.db       # SQLite（相对 backend/）
+
+frontend:
+  dist: ../frontend/dist     # `npm run build` 产物，存在则由 FastAPI 托管

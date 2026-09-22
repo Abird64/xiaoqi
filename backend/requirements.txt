@@ -1,0 +1,9 @@
+# 小栖后端 · 运行依赖（D-007：单进程，`python -m xiaoqi` 起全部）
+fastapi>=0.110
+uvicorn[standard]>=0.29
+websockets>=12
+numpy>=1.26
+opencv-python>=4.9
+mediapipe>=0.10.14      # CPU 即可，无需 GPU；装不上时用 `--sim` 跑通其余链路
+pyyaml>=6.0
+# Windows 行为采集（W10，成员 C）：pywin32>=306 ; psutil>=5.9
