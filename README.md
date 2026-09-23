@@ -7,7 +7,7 @@
 > 技术上是健康数据工具，呈现上是一件**值得反复看的多媒体作品**。
 
 <p>
-<img alt="status" src="https://img.shields.io/badge/status-M1-开发中-brightgreen">
+<img alt="status" src="https://img.shields.io/badge/status-M1--开发中-brightgreen">
 <img alt="platform" src="https://img.shields.io/badge/platform-Windows-blue">
 <img alt="stack" src="https://img.shields.io/badge/stack-Python%20%2B%20Three.js-informational">
 <img alt="license" src="https://img.shields.io/badge/license-TBD-lightgrey">
