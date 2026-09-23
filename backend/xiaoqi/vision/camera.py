@@ -17,7 +17,7 @@ from .pose_estimator import PoseEstimator
 
 log = logging.getLogger("xiaoqi.camera")
 
-# --sim 剧本：给没有摄像头 / 给前端 B 做 mock 消费（XQ-011）
+# --sim 剧本：给没有摄像头 / 给前端 A 做 mock 消费（XQ-013）
 SIM_SCRIPT = [
     ("upright", 8.0),
     ("slouch", 8.0),
