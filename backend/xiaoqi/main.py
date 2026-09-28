@@ -6,7 +6,8 @@ import contextlib
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import (FastAPI, HTTPException, Query, WebSocket,
+                     WebSocketDisconnect)
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -20,6 +21,9 @@ from .store.db import Store
 from .vision.camera import CaptureThread, SimThread
 
 log = logging.getLogger("xiaoqi.main")
+
+# 协议 §4.1：GET /api/history 单次查询范围上限
+HISTORY_MAX_RANGE_MS = 7 * 24 * 3600 * 1000
 
 
 def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
@@ -95,12 +99,25 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
                                            app.state.source, "last_error", None)}}
 
     @app.get("/api/history")
-    async def get_history(from_: int | None = None, to: int | None = None,
-                          kind: str | None = None, limit: int = 5000):
-        """人机课 M2 报告要用的历史查询（P7：是否随 v0.1 冻结待周会确认）。"""
+    async def get_history(
+        from_: int | None = Query(None, alias="from"),
+        to: int | None = Query(None, alias="to"),
+        kind: str | None = None,           # 本站扩展，协议未定义
+        limit: int = 5000,                 # 本站扩展，安全阀
+    ):
+        """历史查询（`接口协议.md` §4.1，随 v0.1 冻结）。
+
+        ⚠️ `from` 是 Python 保留字，参数只能写作 `from_`。**必须**用
+        `Query(alias="from")` 把它对外暴露成 `from` —— FastAPI 按参数名匹配
+        查询串，不写 alias 的话协议要求的 `?from=` 会被静默忽略、退回查全量。
+        """
         store: Store = app.state.store
-        return {"v": 1, "ts": now_ms(),
-                "items": store.query(from_, to, kind, limit)}
+        t = to or now_ms()
+        f = from_ if from_ is not None else t - HISTORY_MAX_RANGE_MS
+        if t - f > HISTORY_MAX_RANGE_MS:
+            raise HTTPException(status_code=400, detail="RANGE_TOO_WIDE")
+        return {"v": 1, "from": f, "to": t,
+                "samples": store.query_snapshots(f, t, kind, limit)}
 
     @app.post("/api/calibration/reset")
     async def reset_calibration():
