@@ -1,0 +1,87 @@
+:root {
+  --hud-bg: rgba(22, 25, 31, 0.72);
+  --hud-fg: #eef1f5;
+  --hud-dim: #98a2b3;
+  --hud-on: #7ddc9a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #171a20;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  color: var(--hud-fg);
+}
+
+#scene {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ---- HUD ---- */
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* 不挡住拖拽旋转 */
+  padding: 16px;
+}
+
+.hud-card {
+  position: absolute;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--hud-bg);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hud-status {
+  top: 16px;
+  left: 16px;
+  min-width: 168px;
+}
+
+.hud-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--hud-dim);
+}
+
+.hud-value {
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.hud-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--hud-dim);
+}
+
+.hud-note.is-on {
+  color: var(--hud-on);
+}
+
+.hud-fps {
+  top: 16px;
+  right: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-dim);
+}
+
+.hud-hint {
+  bottom: 16px;
+  left: 16px;
+  color: var(--hud-dim);
+  font-size: 12px;
+}
