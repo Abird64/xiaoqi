@@ -23,7 +23,6 @@ const num = (key) => {
 // ---- 渲染器 ----
 const canvas = document.querySelector('#scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 // ---- 场景 ----
 const scene = new THREE.Scene();
@@ -43,9 +42,12 @@ scene.add(createRoom({ grid: params.get('grid') !== '0' }));
 const hud = createHud();
 
 // ---- 自适应窗口 ----
+// devicePixelRatio 在 resize 里重读：跨屏拖动（普通屏 ↔ 高分屏）时 dpr 会变，
+// 只在启动读一次会让高分屏上的画面糊、或在低分屏上白白多渲染数倍像素。
 function resize() {
   const width = window.innerWidth;
   const height = window.innerHeight;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(width, height, false);
   viewer.resize(width, height);
 }
@@ -59,5 +61,9 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, viewer.camera);
 });
 
-// 调试入口：控制台里可直接改场景（F12 → __xiaoqi.scene.getObjectByName('room')）
-window.__xiaoqi = { THREE, scene, renderer, viewer, hud };
+// 调试入口：开发期在控制台可直接改场景
+// （F12 → __xiaoqi.scene.getObjectByName('room')）
+// 只在开发期挂载 —— 生产构建带上它等于把内部对象对外暴露。
+if (import.meta.env.DEV) {
+  window.__xiaoqi = { THREE, scene, renderer, viewer, hud };
+}

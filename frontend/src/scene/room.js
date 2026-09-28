@@ -37,9 +37,11 @@ export function createRoom({ grid = true } = {}) {
   room.add(floor);
 
   // ---- 两面墙（成直角，做出墙角）----
+  // side: DoubleSide —— 房间只做了两面墙，相机绕到墙背后时单面材质会被背面剔除、
+  // 整面墙凭空消失；双面渲染让任意机位都有画面（M3 录视频要绕机位）。
   const backWall = new THREE.Mesh(
     new THREE.PlaneGeometry(size, wallHeight),
-    new THREE.MeshStandardMaterial({ color: COLOR.wall, roughness: 1 })
+    new THREE.MeshStandardMaterial({ color: COLOR.wall, roughness: 1, side: THREE.DoubleSide })
   );
   backWall.name = 'wall-back';
   backWall.position.set(0, wallHeight / 2, -size / 2);
@@ -48,7 +50,7 @@ export function createRoom({ grid = true } = {}) {
 
   const leftWall = new THREE.Mesh(
     new THREE.PlaneGeometry(size, wallHeight),
-    new THREE.MeshStandardMaterial({ color: COLOR.wall, roughness: 1 })
+    new THREE.MeshStandardMaterial({ color: COLOR.wall, roughness: 1, side: THREE.DoubleSide })
   );
   leftWall.name = 'wall-left';
   leftWall.position.set(-size / 2, wallHeight / 2, 0);
