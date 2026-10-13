@@ -1,9 +1,16 @@
 /**
- * 前端入口 —— XQ-008「Three.js 空房间骨架跑通（能转相机）」
+ * 前端入口 —— XQ-003「M3-1 房间骨架补齐（13 件物件 + 粘土风 + 双光）」
  * owner: A（张鹏）
  *
  * 装配顺序：渲染器 → 场景 → 相机/控制器 → 房间 → HUD → 渲染循环。
  * 渲染循环用 setAnimationLoop（而不是 rAF 裸调用），方便以后接 XR / 统一暂停。
+ *
+ * M3-1 本轮改动：
+ *   1. 开 shadowMap（PCFSoftShadowMap）—— XQ-008 时只铺了 receiveShadow，没开阴影，
+ *      家具进来后没有影子，房间「飘」着不像基准图
+ *   2. toneMapping 换成 ACESFilmic —— 暖主光 + 冷天光两种强光直接相加会过曝
+ *   3. 机位从 (4.4, 3.2, 4.8) 调到与基准图一致的角落透视
+ *   4. 背景色改成雾化的蓝灰，与落地窗外的城市天色衔接（原来深灰 #171a20 与窗景脱节）
  */
 import * as THREE from 'three';
 import './style.css';
@@ -24,9 +31,17 @@ const num = (key) => {
 const canvas = document.querySelector('#scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 
+// M3-1：开阴影。PCFSoftShadowMap —— 基准图阴影柔和无强反射（渲染图反推）。
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// 暖主光 + 冷天光同场，两盏强光直接相加会过曝，基准图的高光已被压住。
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15; // 实测 1.0 偏暗，基准图整体亮一档
+
 // ---- 场景 ----
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x171a20); // 房间外的底色
+// 与窗外 cityFar (#8fa5bd) 同色：房间外不再是突兀的深灰，镜头推近时衔接自然
+scene.background = new THREE.Color(0x8fa5bd);
 
 // ---- 相机 / 控制器 ----
 const viewer = createViewer(canvas, {
