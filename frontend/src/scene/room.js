@@ -353,11 +353,10 @@ function buildClock() {
   const group = new THREE.Group();
   group.name = NAME.clock;
   group.position.set(WALL + 2.15, DESK_H + 0.025, WALL + 0.38);
-  // XQ-011 A1：表盘朝向 (+x,+z) 斜方，与默认机位视线夹角约 23°
-  // 默认机位 (3.0,1.8,1.8) 看闹钟的视线水平投影 az≈41°；45° 时圆面几乎正对镜头（夹角 4°）
-  // 叠加扁主体读作「平放的饼」。65° 时法线 R_y(65°)·(0,0,1)=(+0.906,0,+0.423)，
-  // x 分量 >0 保持朝观众象限（不重演 C5 的 -45° 侧掠），夹角 ≈23° 圆面呈斜椭、厚度可辨。
-  group.rotation.y = (65 * Math.PI) / 180;
+  // XQ-014：表盘朝向 65°→0°，法线 (0,0,1) 纯 +z，与显示器屏幕同向、正对椅子。
+  // 65° 是 XQ-011 为消「默认机位饼读感」设的斜角；XQ-013 盘体竖正后结构已成立，
+  // 组长要求朝向对齐场景逻辑（闹钟/显示器都面朝使用者），故归零同向。
+  group.rotation.y = 0;
 
   // 粘土奶油白（亚光无高光，对齐 materials.js 美术规格）
   const creamMat = clay(0xf2ead8, { roughness: 0.9 });
