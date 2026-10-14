@@ -354,7 +354,8 @@ function buildClock() {
   group.name = NAME.clock;
   group.position.set(WALL + 2.15, DESK_H + 0.025, WALL + 0.38);
   // XQ-010 C5：表盘朝向 (+x,+z) 斜方（对齐参考图闹钟斜朝观众），position 不变
-  group.rotation.y = -Math.PI / 4;
+  // R_y(+45°)·(0,0,1) = (+0.707, 0, +0.707) —— 审核回修：-45° 会朝 (-x,+z) 侧掠观众
+  group.rotation.y = Math.PI / 4;
 
   // 粘土奶油白（亚光无高光，对齐 materials.js 美术规格）
   const creamMat = clay(0xf2ead8, { roughness: 0.9 });
