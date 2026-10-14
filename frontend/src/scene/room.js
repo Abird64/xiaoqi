@@ -377,7 +377,11 @@ function buildClock() {
   // 下贴盘边缘与刻度圈层层投影成环纹，读作「贴表的桶」。
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.0925, 0.0925, 0.05, 24), creamMat);
   body.name = 'clock-body';
-  body.position.y = 0.049;
+  // XQ-013 A1：盘体竖正——CylinderGeometry 默认轴向 Y（圆面朝上下），表盘置局部 z 即埋主体内。
+  // rotation.x = π/2 把轴向扳到 Z：圆面朝 +z（观众），表盘部件贴盘面。
+  body.rotation.x = Math.PI / 2;
+  // 盘中心 = 脚顶 0.024 + 盘半径 0.0925，盘底缘坐两脚顶
+  body.position.y = 0.1165;
   body.castShadow = true;
   group.add(body);
 
@@ -385,13 +389,13 @@ function buildClock() {
   // 盘面即表盘面，刻度/指针直接读在盘面上，对齐参考图结构
   const face = new THREE.Mesh(new THREE.CircleGeometry(0.090, 28), faceMat);
   face.name = 'clock-face';
-  face.position.set(0, 0.049, 0.027);
+  face.position.set(0, 0.1165, 0.027);
   group.add(face);
 
   // 表盘外圈深棕环（贴盘缘勾边）
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.090, 0.005, 8, 28), darkMat);
   ring.name = 'clock-face-ring';
-  ring.position.set(0, 0.049, 0.027);
+  ring.position.set(0, 0.1165, 0.027);
   group.add(ring);
 
   // 12 刻度：3/6/9/12 位加长
@@ -399,7 +403,7 @@ function buildClock() {
     const a = (i / 12) * Math.PI * 2;
     const tick = roundedBox(0.007, i % 3 === 0 ? 0.016 : 0.009, 0.003, 0.001, darkMat);
     tick.name = `clock-tick-${i}`;
-    tick.position.set(Math.sin(a) * 0.056, 0.049 + Math.cos(a) * 0.056, 0.030);
+    tick.position.set(Math.sin(a) * 0.056, 0.1165 + Math.cos(a) * 0.056, 0.030);
     tick.rotation.z = -a;
     group.add(tick);
   }
@@ -407,26 +411,26 @@ function buildClock() {
   // 时针 / 分针 / 轴帽
   const hour = roundedBox(0.008, 0.032, 0.003, 0.001, darkMat);
   hour.name = 'clock-hand-hour';
-  hour.position.set(-0.009, 0.063, 0.031);
+  hour.position.set(-0.009, 0.130, 0.031);
   hour.rotation.z = -0.5;
   group.add(hour);
 
   const minute = roundedBox(0.006, 0.045, 0.003, 0.001, darkMat);
   minute.name = 'clock-hand-minute';
-  minute.position.set(0.004, 0.068, 0.032);
+  minute.position.set(0.004, 0.135, 0.032);
   minute.rotation.z = 1.1;
   group.add(minute);
 
   const cap = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 8, 6), darkMat);
   cap.name = 'clock-hand-cap';
-  cap.position.set(0, 0.049, 0.033);
+  cap.position.set(0, 0.1165, 0.033);
   group.add(cap);
 
   // 双铃：短柄外倾 0.42rad → 大半球铃 → 铃下铃锤
   [-1, 1].forEach((s, i) => {
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.03, 10), creamMat);
     stem.name = `clock-bell-stem-${i}`;
-    stem.position.set(s * 0.058, 0.082, 0);
+    stem.position.set(s * 0.058, 0.150, 0);
     stem.rotation.z = -s * 0.42;
     stem.castShadow = true;
     group.add(stem);
@@ -436,21 +440,21 @@ function buildClock() {
       creamMat
     );
     bell.name = `clock-bell-${i}`;
-    bell.position.set(s * 0.082, 0.100, 0);
+    bell.position.set(s * 0.082, 0.205, 0);
     bell.rotation.z = -s * 0.42;
     bell.castShadow = true;
     group.add(bell);
 
     const hammer = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6), darkMat);
     hammer.name = `clock-hammer-${i}`;
-    hammer.position.set(s * 0.066, 0.085, 0);
+    hammer.position.set(s * 0.066, 0.185, 0);
     group.add(hammer);
   });
 
   // 提手：两铃之间的半拱（加粗，与放大后的铃匹配）
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.082, 0.01, 8, 18, Math.PI), creamMat);
   handle.name = 'clock-handle';
-  handle.position.set(0, 0.100, 0);
+  handle.position.set(0, 0.205, 0);
   handle.castShadow = true;
   group.add(handle);
 
