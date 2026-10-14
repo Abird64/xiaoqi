@@ -428,9 +428,11 @@ function buildClock() {
 
   // 双铃：短柄外倾 0.42rad → 大半球铃 → 铃下铃锤
   [-1, 1].forEach((s, i) => {
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.03, 10), creamMat);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.04, 10), creamMat);
     stem.name = `clock-bell-stem-${i}`;
-    stem.position.set(s * 0.058, 0.150, 0);
+    // XQ-013 回修（审核非阻塞项）：柄长 0.03→0.04、心上移 0.150→0.185，
+    // 柄 [0.165,0.205] 底埋盘面（x=0.058 处盘面上缘 0.1886）、顶贴铃赤道 0.205，恢复柄-铃连接
+    stem.position.set(s * 0.058, 0.185, 0);
     stem.rotation.z = -s * 0.42;
     stem.castShadow = true;
     group.add(stem);
