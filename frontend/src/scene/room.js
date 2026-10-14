@@ -1,5 +1,5 @@
 /**
- * 家具与陈设 —— XQ-003「M3-1 房间骨架补齐」
+ * 家具与陈设 —— XQ-003「M3-1 房间骨架补齐」+ XQ-009「视觉精修」
  * owner: A（张鹏）
  *
  * ══════ 布局定稿（照 04-视觉参考/房间-建模基准.jpeg 数出来，不是猜的）══════
@@ -16,11 +16,11 @@
  *
  * ── 坐标约定（1 单位 = 1 米，y 向上，地面 y = 0，房间 6×6×3）──
  *   **实体墙 x = -3**  椭圆镜 + 挂历           （画面左 1/3）
- *   **窗墙   z = -3**  整面落地窗 + 城市剪影   （画面右 2/3，光源）
+ *   **窗墙   z = -3**  整面落地窗 + 城市景观     （画面右 2/3，光源）
  *   **敞口   z = +3 / x = +3**  留机位，不立任何东西
  *
- *   ⚠️ 这个归属与 XQ-008 旧约定**不同**（旧：后墙 z=-3 贴显示器 / 左墙 x=-3 挂日历）。
- *      显示器现在贴的是窗墙 z=-3。看旧代码时别照旧记忆。
+ * ⚠️ XQ-009 只改视觉层（贴图 / 窗外景观 / 光晕 / 闹钟造型 / 绿植造型），
+ *    几何布局、坐标、机位、6 光源结构一律不动（XQ-003 定稿）。
  *
  * 五个坑（小栖 界面原型.md §六）：
  *   1. 实体墙只放镜子 + 日历两件
@@ -31,6 +31,7 @@
  */
 import * as THREE from 'three';
 import { PALETTE, clay, glow, roundedBox, NAME } from './materials.js';
+import { makeWallpaperTexture, makeFloorTexture, makeCityTexture, makeGlowTexture } from './textures.js';
 
 export const ROOM = { size: 6, wallHeight: 3 };
 
@@ -47,9 +48,11 @@ const WALL = -ROOM.size / 2;   // = -3
 // ============================================================
 
 function buildFloor() {
+  // G2：长条木地板程序化贴图（textures.js，repeat 6×6 → 板宽 0.25m）。
+  // color 用白色 tint：贴图本身已含基色，再乘 PALETTE.floor 会双重变暗。
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM.size, ROOM.size),
-    clay(PALETTE.floor, { roughness: 0.88 })
+    clay(0xffffff, { roughness: 0.88, map: makeFloorTexture() })
   );
   floor.name = NAME.floor;
   floor.rotation.x = -Math.PI / 2;
@@ -59,9 +62,10 @@ function buildFloor() {
 
 /** x = -3 → 实体墙：镜子 + 日历本挂这面 */
 function buildSolidWall() {
+  // G1：暖米白底 + 菱形网格暗纹（textures.js，repeat 3×3 → 12 纹样周期/墙）
   const wall = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM.size, ROOM.wallHeight),
-    clay(PALETTE.wall, { side: THREE.DoubleSide })
+    clay(0xffffff, { roughness: 0.9, map: makeWallpaperTexture(), side: THREE.DoubleSide })
   );
   wall.name = NAME.wallLeft;
   wall.position.set(WALL, ROOM.wallHeight / 2, 0);
@@ -87,27 +91,17 @@ function buildWindow() {
   const W = X_FRONT - X_BACK;
   const X_MID = (X_FRONT + X_BACK) / 2;
 
-  // 远景天色：雾化蓝灰，与 scene.background 同色
-  const sky = new THREE.Mesh(
+  // G3：城市景观贴图（天空渐变 + 3 层楼群，远浅近深大气透视）。
+  // 一张大 plane 取代 XQ-003 的「单色天 + 6 块纯色矩形」；
+  // MeshBasicMaterial（自表现，不受房间灯光影响——窗外是另一个光源世界）。
+  // 1024×640 ≈ 窗 4.8m×3m 的 1.6 宽高比，不变形。
+  const city = new THREE.Mesh(
     new THREE.PlaneGeometry(W, H),
-    new THREE.MeshBasicMaterial({ color: PALETTE.cityFar })
+    new THREE.MeshBasicMaterial({ map: makeCityTexture() })
   );
-  sky.name = 'window-sky';
-  sky.position.set(X_MID, H / 2, -0.06);
-  group.add(sky);
-
-  // 远景剪影：纯色矩形，不带植物（坑 2）
-  const silhouetteMat = new THREE.MeshBasicMaterial({ color: PALETTE.cityNear });
-  const boxes = [
-    [-1.6, 0.9, 1.0, 1.5], [-1.1, 1.25, 0.9, 2.0], [-0.4, 0.75, 1.1, 1.25],
-    [0.4, 1.0, 1.3, 1.75], [1.2, 0.8, 1.1, 1.4], [1.9, 1.05, 1.0, 1.85],
-  ];
-  boxes.forEach(([dx, y, w, h], i) => {
-    const b = new THREE.Mesh(new THREE.PlaneGeometry(w, h), silhouetteMat);
-    b.name = `window-city-${i}`;
-    b.position.set(X_MID + dx, y, -0.04);
-    group.add(b);
-  });
+  city.name = 'window-city';
+  city.position.set(X_MID, H / 2, -0.05);
+  group.add(city);
 
   // 窗框：上下横梁 + 上部气窗分隔 + 两根竖梃（参考图是两扇大窗 + 气窗）
   const frameMat = clay(PALETTE.windowFrame);
@@ -341,105 +335,178 @@ function buildMouse() {
   return mouse;
 }
 
+// ============================================================
+// G6 桌面闹钟（双铃）—— XQ-009 整体重做
+// ============================================================
+
+/**
+ * XQ-003 旧版被组长判「建的很失败」：银色圆柱 + 两片半球铃直愣愣插在顶上、
+ * 表盘无刻度，读不出是「双铃闹钟」。本版照参考图重做：
+ *   - 扁圆柱主体 + 白表盘 + 12 刻度 + 时针分针（经典闹钟读法）
+ *   - 双铃挂在**外倾的短柄**上、铃下带铃锤、两铃之间拱形提手
+ *   - 两只脚先落地，整体约 0.2m 高（桌面物件的合理档位）
+ */
 function buildClock() {
   const group = new THREE.Group();
   group.name = NAME.clock;
   group.position.set(WALL + 2.15, DESK_H + 0.025, WALL + 0.38);
 
   const silverMat = clay(PALETTE.silver, { roughness: 0.45, metalness: 0.55 });
+  const darkMat = clay(0x2c2f33, { roughness: 0.6 });
 
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 22), silverMat);
+  // 脚（先落地，后盖上头）
+  [[-0.05, 'clock-foot-0'], [0.05, 'clock-foot-1']].forEach(([x, name]) => {
+    const foot = roundedBox(0.035, 0.022, 0.05, 0.008, silverMat);
+    foot.name = name;
+    foot.position.set(x, 0.011, 0);
+    group.add(foot);
+  });
+
+  // 主体：扁圆柱（直径 0.17、厚 0.05）
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.05, 24), silverMat);
   body.name = 'clock-body';
-  body.position.y = 0.085;
+  body.position.y = 0.048;
   body.castShadow = true;
   group.add(body);
 
-  const face = new THREE.Mesh(new THREE.CircleGeometry(0.066, 26), clay(0xf7f6f2));
+  // 表盘（+z 面朝房间内）
+  const face = new THREE.Mesh(new THREE.CircleGeometry(0.068, 28), clay(0xf7f6f2, { roughness: 0.7 }));
   face.name = 'clock-face';
-  face.position.set(0, 0.085, 0.026);
+  face.position.set(0, 0.048, 0.026);
   group.add(face);
 
-  const hour = roundedBox(0.008, 0.038, 0.004, 0.002, clay(0x2c2f33));
+  // 12 刻度：3/6/9/12 位加长
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const tick = roundedBox(0.006, i % 3 === 0 ? 0.014 : 0.008, 0.003, 0.001, darkMat);
+    tick.name = `clock-tick-${i}`;
+    tick.position.set(Math.sin(a) * 0.052, 0.048 + Math.cos(a) * 0.052, 0.028);
+    tick.rotation.z = -a;
+    group.add(tick);
+  }
+
+  // 时针 / 分针 / 轴帽
+  const hour = roundedBox(0.007, 0.03, 0.003, 0.001, darkMat);
   hour.name = 'clock-hand-hour';
-  hour.position.set(0.009, 0.097, 0.029);
-  hour.rotation.z = -0.6;
+  hour.position.set(-0.008, 0.061, 0.03);
+  hour.rotation.z = -0.5;
   group.add(hour);
 
-  const minute = roundedBox(0.006, 0.052, 0.004, 0.002, clay(0x2c2f33));
+  const minute = roundedBox(0.005, 0.042, 0.003, 0.001, darkMat);
   minute.name = 'clock-hand-minute';
-  minute.position.set(0.015, 0.097, 0.03);
-  minute.rotation.z = 0.9;
+  minute.position.set(0.004, 0.065, 0.031);
+  minute.rotation.z = 1.1;
   group.add(minute);
 
-  // 双铃 + 提手（参考图是老式双铃闹钟）
-  [-0.075, 0.075].forEach((x, i) => {
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), darkMat);
+  cap.name = 'clock-hand-cap';
+  cap.position.set(0, 0.048, 0.032);
+  group.add(cap);
+
+  // 双铃：短柄外倾 0.45rad → 半球铃 → 铃下铃锤
+  [-1, 1].forEach((s, i) => {
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.032, 10), silverMat);
+    stem.name = `clock-bell-stem-${i}`;
+    stem.position.set(s * 0.055, 0.089, 0);
+    stem.rotation.z = -s * 0.45;
+    stem.castShadow = true;
+    group.add(stem);
+
     const bell = new THREE.Mesh(
-      new THREE.SphereGeometry(0.035, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.SphereGeometry(0.036, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
       silverMat
     );
     bell.name = `clock-bell-${i}`;
-    bell.position.set(x, 0.115, 0);
-    bell.rotation.z = i === 0 ? 0.5 : -0.5;
+    bell.position.set(s * 0.074, 0.108, 0);
+    bell.rotation.z = -s * 0.45;
     bell.castShadow = true;
     group.add(bell);
+
+    const hammer = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), darkMat);
+    hammer.name = `clock-hammer-${i}`;
+    hammer.position.set(s * 0.062, 0.095, 0);
+    group.add(hammer);
   });
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.006, 6, 12, Math.PI), silverMat);
+
+  // 提手：两铃之间的半拱
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.007, 8, 18, Math.PI), silverMat);
   handle.name = 'clock-handle';
-  handle.position.set(0, 0.145, 0);
+  handle.position.set(0, 0.108, 0);
   handle.castShadow = true;
   group.add(handle);
-
-  [[-0.055, 'clock-foot-0'], [0.055, 'clock-foot-1']].forEach(([x, name]) => {
-    const foot = roundedBox(0.03, 0.02, 0.04, 0.008, silverMat);
-    foot.name = name;
-    foot.position.set(x, 0.01, 0);
-    group.add(foot);
-  });
 
   return group;
 }
 
 // ============================================================
-// 盆栽（显示器旁）
+// G7 盆栽（显示器旁）—— XQ-009 整体重做
 // ============================================================
 
+/**
+ * XQ-003 旧版被组长判「建的很失败」：白圆柱盆 + 7 根圆锥呈刺球，读不出是植物。
+ * 本版照参考图重做：
+ *   - 梯形盆（上口 0.164、底 0.116、高 0.1）+ 盆沿 + 土面
+ *   - 桨形叶 7 片：球形缩成扁长透镜；内 3 片高而直、外 4 片矮而张，扇形排布
+ *   - 两色绿交替 + flatShading，保留「硬边 low-poly」的美术规格（原型 §8.2）
+ */
 function buildPlant() {
   const group = new THREE.Group();
   group.name = NAME.plant;
   group.position.set(WALL + 1.95, DESK_H + 0.025, WALL + 0.34);
 
-  const pot = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.075, 0.06, 0.1, 14),
-    clay(PALETTE.white, { roughness: 0.85 })
-  );
+  // 梯形盆 + 盆沿
+  const potMat = clay(0xe8e6e0, { roughness: 0.85 });
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.058, 0.1, 16), potMat);
   pot.name = NAME.plantPot;
   pot.position.y = 0.05;
   pot.castShadow = true;
   pot.receiveShadow = true;
   group.add(pot);
 
-  const soil = new THREE.Mesh(new THREE.CircleGeometry(0.07, 14), clay(0x4a3d33));
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.089, 0.083, 0.02, 16), potMat);
+  rim.name = 'plant-pot-rim';
+  rim.position.y = 0.1;
+  rim.castShadow = true;
+  group.add(rim);
+
+  const soil = new THREE.Mesh(new THREE.CircleGeometry(0.08, 16), clay(0x4a3d33));
   soil.name = 'plant-soil';
   soil.rotation.x = -Math.PI / 2;
-  soil.position.y = 0.1;
+  soil.position.y = 0.101;
   group.add(soil);
 
-  const leafGeo = new THREE.ConeGeometry(0.03, 0.16, 4);
+  // 桨形叶：单位球缩成 (宽 0.024, 长 h, 厚 0.012) 的扁透镜，长轴对齐生长方向
+  const leafGeo = new THREE.SphereGeometry(1, 8, 6);
   const leafMat = new THREE.MeshStandardMaterial({
     color: PALETTE.leafLight, roughness: 0.85, metalness: 0, flatShading: true,
   });
   const leafMatDark = new THREE.MeshStandardMaterial({
     color: PALETTE.leafDark, roughness: 0.85, metalness: 0, flatShading: true,
   });
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
+
+  // [方位角°, 叶长 m, 外张角°] —— 内高外低、扇形张开
+  const leaves = [
+    [0, 0.150, 8], [52, 0.130, 20], [104, 0.145, 6], [156, 0.120, 32],
+    [208, 0.135, 14], [260, 0.115, 40], [312, 0.125, 24],
+  ];
+  const UP = new THREE.Vector3(0, 1, 0);
+  leaves.forEach(([deg, len, tilt], i) => {
+    const a = (deg / 180) * Math.PI;
+    const t = (tilt * Math.PI) / 180;
+    // 生长方向：竖直方向绕方位角外张 tilt
+    const dir = new THREE.Vector3(
+      Math.cos(a) * Math.sin(t), Math.cos(t), Math.sin(a) * Math.sin(t)
+    ).normalize();
+
     const leaf = new THREE.Mesh(leafGeo, i % 2 === 0 ? leafMat : leafMatDark);
     leaf.name = `plant-leaf-${i}`;
-    leaf.position.set(Math.cos(a) * 0.035, 0.185 + (i % 3) * 0.024, Math.sin(a) * 0.035);
-    leaf.rotation.set(Math.sin(a) * 0.5, a, Math.cos(a) * -0.5);
-    leaf.castShadow = false;
+    leaf.scale.set(0.024, len, 0.012);
+    leaf.quaternion.setFromUnitVectors(UP, dir);
+    leaf.position.set(0, 0.101, 0).addScaledVector(dir, len * 0.42);
+    leaf.castShadow = true;
     group.add(leaf);
-  }
+  });
+
   return group;
 }
 
@@ -607,6 +674,23 @@ function buildLights() {
   bulb.name = 'lamp-bulb';
   bulb.position.y = -0.06;
   lampGroup.add(bulb);
+
+  // G4：辉光 sprite —— 径向渐变 + 加色混合，包在灯泡外。
+  // 不动 6 光源结构（这是「看得见的暖」，不是新光源）；depthWrite 关掉避免挡家具。
+  const glowSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: makeGlowTexture(),
+      color: PALETTE.lampWarm,
+      transparent: true,
+      opacity: 0.78,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  glowSprite.name = 'lamp-glow';
+  glowSprite.scale.set(0.78, 0.78, 1);
+  glowSprite.position.y = -0.06;
+  lampGroup.add(glowSprite);
 
   group.add(lampGroup);
 
