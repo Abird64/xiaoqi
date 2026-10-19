@@ -568,12 +568,43 @@ function buildMug() {
   const water = new THREE.Mesh(
     new THREE.CylinderGeometry(0.034, 0.032, 0.058, 18),
     new THREE.MeshStandardMaterial({
-      color: 0x9fc4d8, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.75,
+      color: 0x8db9d6, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.85,
     })
   );
   water.name = 'mug-water';
   water.position.y = 0.034;
   group.add(water);
+
+  // 杯口厚沿：给杯口一个明确的陶瓷边（XQ-016）
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.0035, 8, 20), whiteMat);
+  rim.name = 'mug-rim';
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.1;
+  rim.castShadow = true;
+  group.add(rim);
+
+  // 杯口内壁：顶半径 0.0365 小于杯体顶半径 0.04，形成第二层内表面，
+  // 法线不同有独立 shading，读作杯壁厚度与内部凹陷（XQ-016）；
+  // whiteMat 已被 body.material.side = DoubleSide 改过，本 mesh 继承双面
+  const innerWall = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0365, 0.0345, 0.04, 18, 1, true),
+    whiteMat
+  );
+  innerWall.name = 'mug-inner-wall';
+  innerWall.position.y = 0.08;
+  group.add(innerWall);
+
+  // 液面：水面圆盘置于水柱 cap（y=0.063）上方 0.2mm，更亮更实（XQ-016）
+  const surface = new THREE.Mesh(
+    new THREE.CircleGeometry(0.0335, 20),
+    new THREE.MeshStandardMaterial({
+      color: 0x8ec2e6, roughness: 0.12, metalness: 0, transparent: true, opacity: 0.95,
+    })
+  );
+  surface.name = 'mug-surface';
+  surface.rotation.x = -Math.PI / 2;
+  surface.position.y = 0.0632;
+  group.add(surface);
 
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.007, 6, 12, Math.PI * 1.2), whiteMat);
   handle.name = 'mug-handle';
