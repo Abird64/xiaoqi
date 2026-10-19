@@ -224,6 +224,16 @@ function buildChair() {
   backRest.castShadow = true;
   group.add(backRest);
 
+  // 腰靠分块：靠背中下部独立小面，朝坐者（+z）突出（XQ-017）
+  // 宽 0.32 < 靠背 0.44 两侧露边；后半（z 0.22~0.23）嵌进靠背防浮空，前半突出约 0.02；
+  // 与靠背同色同倾角（-0.12），粘土风靠形体+独立 shading 分块，不靠颜色对比
+  const lumbar = roundedBox(0.32, 0.20, 0.05, 0.02, seatMat);
+  lumbar.name = 'chair-lumbar';
+  lumbar.position.set(0, 0.59, 0.245);
+  lumbar.rotation.x = -0.12;
+  lumbar.castShadow = true;
+  group.add(lumbar);
+
   const column = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.34, 12), metalMat);
   column.name = 'chair-column';
   column.position.set(0, SEAT_H - 0.21, 0);
