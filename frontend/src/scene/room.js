@@ -499,8 +499,8 @@ function buildPlant() {
   soil.position.y = 0.101;
   group.add(soil);
 
-  // 桨形叶：单位球缩成 (宽 0.024, 长 h, 厚 0.012) 的扁透镜，长轴对齐生长方向
-  const leafGeo = new THREE.SphereGeometry(1, 8, 6);
+  // 桨形叶：单位球缩成 (宽 0.034, 长 h, 厚 0.018) 的圆透镜，长轴对齐生长方向
+  const leafGeo = new THREE.SphereGeometry(1, 12, 8);
   const leafMat = new THREE.MeshStandardMaterial({
     color: PALETTE.leafLight, roughness: 0.85, metalness: 0, flatShading: true,
   });
@@ -508,13 +508,16 @@ function buildPlant() {
     color: PALETTE.leafDark, roughness: 0.85, metalness: 0, flatShading: true,
   });
 
-  // [方位角°, 叶长 m, 外张角°] —— 内高外低、扇形张开
+  // [方位角°, 叶长 m, 外张角°, 基部半径 m] —— 非等差错开、内高外垂、基部散开
+  // XQ-015：原 7 片等差 52° 全竖直同点出发读作「放射绿刺」；
+  // 改 8 片非等差，外叶 42~62° 下垂，基部沿盆内 0.02~0.05 圆周错开
   const leaves = [
-    [0, 0.150, 8], [52, 0.130, 20], [104, 0.145, 6], [156, 0.120, 32],
-    [208, 0.135, 14], [260, 0.115, 40], [312, 0.125, 24],
+    [0, 0.165, 12, 0.020], [38, 0.150, 24, 0.030], [91, 0.158, 15, 0.020],
+    [133, 0.128, 48, 0.045], [180, 0.145, 20, 0.025], [227, 0.118, 62, 0.050],
+    [281, 0.122, 55, 0.045], [330, 0.135, 30, 0.035],
   ];
   const UP = new THREE.Vector3(0, 1, 0);
-  leaves.forEach(([deg, len, tilt], i) => {
+  leaves.forEach(([deg, len, tilt, base], i) => {
     const a = (deg / 180) * Math.PI;
     const t = (tilt * Math.PI) / 180;
     // 生长方向：竖直方向绕方位角外张 tilt
@@ -524,9 +527,11 @@ function buildPlant() {
 
     const leaf = new THREE.Mesh(leafGeo, i % 2 === 0 ? leafMat : leafMatDark);
     leaf.name = `plant-leaf-${i}`;
-    leaf.scale.set(0.024, len, 0.012);
+    leaf.scale.set(0.034, len, 0.018);
     leaf.quaternion.setFromUnitVectors(UP, dir);
-    leaf.position.set(0, 0.101, 0).addScaledVector(dir, len * 0.42);
+    leaf.position
+      .set(Math.cos(a) * base, 0.101, Math.sin(a) * base)
+      .addScaledVector(dir, len * 0.42);
     leaf.castShadow = true;
     group.add(leaf);
   });
