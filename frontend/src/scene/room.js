@@ -645,14 +645,45 @@ function buildMirror() {
   frame.castShadow = true;
   group.add(frame);
 
+  // 镜面：场景无 envMap，metalness 0.6→0.35 保亮度、roughness 0.1→0.06 收紧高光（XQ-018）
   const glass = new THREE.Mesh(
     new THREE.CircleGeometry(0.385, 26),
-    new THREE.MeshStandardMaterial({ color: 0xc8d4dc, roughness: 0.1, metalness: 0.6 })
+    new THREE.MeshStandardMaterial({ color: 0xdde8f0, roughness: 0.06, metalness: 0.35 })
   );
   glass.name = 'mirror-glass';
   glass.scale.set(1, 1.35, 1);
   glass.position.x = -0.014;
   group.add(glass);
+
+  // 镜面反光 streak：窗光在镜面上的两道斜向高光（XQ-018）
+  // 自绘将向 alpha 渐变（两端淡出），避免硬边白带读作贴纸
+  const sheenTex = () => {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 16;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 128, 0);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 16);
+    return new THREE.CanvasTexture(c);
+  };
+  const sheenMat = (op) => new THREE.MeshBasicMaterial({
+    map: sheenTex(), transparent: true, opacity: op, depthWrite: false,
+  });
+  const sheen0 = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.05), sheenMat(0.55));
+  sheen0.name = 'mirror-sheen-0';
+  sheen0.position.set(0, 0.10, 0.002);
+  sheen0.rotation.z = -0.55;
+  group.add(sheen0);
+
+  const sheen1 = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.035), sheenMat(0.35));
+  sheen1.name = 'mirror-sheen-1';
+  sheen1.position.set(-0.05, -0.16, 0.002);
+  sheen1.rotation.z = -0.55;
+  group.add(sheen1);
 
   return group;
 }
@@ -663,22 +694,53 @@ function buildCalendar() {
   group.position.set(WALL + 0.03, 1.92, -1.85);
   group.rotation.y = Math.PI / 2;
 
+  // 描边卡片：比 paper 大一圈垫在正后方（XQ-018）
+  const border = roundedBox(0.47, 0.61, 0.018, 0.008, clay(0xb0a89a));
+  border.name = 'calendar-border';
+  border.position.z = -0.001;
+  border.castShadow = true;
+  group.add(border);
+
   const paper = roundedBox(0.46, 0.6, 0.02, 0.008, clay(PALETTE.white));
   paper.name = 'calendar-paper';
   paper.castShadow = true;
   group.add(paper);
+
+  // 月份带：顶部暖橡木色横条，复用 PALETTE.wood（XQ-018）
+  const month = roundedBox(0.40, 0.09, 0.006, 0.004, clay(PALETTE.wood));
+  month.name = 'calendar-month';
+  month.position.set(0, 0.245, 0.0135);
+  group.add(month);
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.006, 6, 12), clay(PALETTE.silver));
   ring.name = 'calendar-ring';
   ring.position.set(0, 0.32, 0.012);
   group.add(ring);
 
-  const gridMat = clay(0xd2ccc0, { roughness: 0.9 });
+  // 挂绳：从装订环两侧斜向上汇到墙上一个钉点（XQ-018）
+  const stringMat = clay(0x9a938a, { roughness: 0.95 });
+  const UP = new THREE.Vector3(0, 1, 0);
+  [-1, 1].forEach((s) => {
+    const from = new THREE.Vector3(s * 0.02, 0.345, 0.012);
+    const to = new THREE.Vector3(0, 0.46, -0.03);
+    const dir = to.clone().sub(from);
+    const str = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0018, 0.0018, dir.length(), 6),
+      stringMat
+    );
+    str.name = `calendar-string-${s < 0 ? 0 : 1}`;
+    str.position.copy(from).addScaledVector(dir, 0.5);
+    str.quaternion.setFromUnitVectors(UP, dir.clone().normalize());
+    group.add(str);
+  });
+
+  // 格子加深且行下移避让月份带（XQ-018）
+  const gridMat = clay(0xb8b0a0, { roughness: 0.9 });
   for (let c = 0; c < 6; c++) {
     for (let r = 0; r < 5; r++) {
       const cell = new THREE.Mesh(new THREE.PlaneGeometry(0.056, 0.07), gridMat);
       cell.name = `calendar-cell-${c}-${r}`;
-      cell.position.set(-0.16 + c * 0.064, 0.19 - r * 0.092, 0.013);
+      cell.position.set(-0.16 + c * 0.064, 0.16 - r * 0.088, 0.013);
       group.add(cell);
     }
   }
