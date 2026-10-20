@@ -417,17 +417,23 @@ function buildClock() {
     group.add(tick);
   }
 
-  // 时针 / 分针 / 轴帽
-  const hour = roundedBox(0.008, 0.032, 0.003, 0.001, darkMat);
+  // XQ-019 指针重修：几何体 translate 让枢轴落在指针底端，再放到轴心 (0, 0.1165) 绕轴转。
+  // 旧版指针以自身中心为枢轴且中心偏离轴心 13~19mm —— 尾部悬空、不接轴帽；
+  // 长度也短（时针 0.032 / 分针 0.045，仅为半径 0.090 的 36%/50%）。
+  // 新比例：时针 0.045（半径 50%）、分针 0.065（72%，略过刻度圈外缘 0.064）；
+  // 角度取经典 10:10：时针 +0.96 rad（逆时针 55°）、分针 −1.05 rad（顺时针 60°），两侧对称。
+  const hour = roundedBox(0.008, 0.045, 0.003, 0.001, darkMat);
   hour.name = 'clock-hand-hour';
-  hour.position.set(-0.009, 0.130, 0.031);
-  hour.rotation.z = -0.5;
+  hour.geometry.translate(0, 0.0225, 0); // 枢轴 = 底端，转动中心回到轴帽
+  hour.position.set(0, 0.1165, 0.0295);
+  hour.rotation.z = 0.96;
   group.add(hour);
 
-  const minute = roundedBox(0.006, 0.045, 0.003, 0.001, darkMat);
+  const minute = roundedBox(0.006, 0.065, 0.003, 0.001, darkMat);
   minute.name = 'clock-hand-minute';
-  minute.position.set(0.004, 0.135, 0.032);
-  minute.rotation.z = 1.1;
+  minute.geometry.translate(0, 0.0325, 0); // 枢轴 = 底端
+  minute.position.set(0, 0.1165, 0.032);   // 抬升避开刻度片（刻度顶 0.0315）
+  minute.rotation.z = -1.05;
   group.add(minute);
 
   const cap = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 8, 6), darkMat);
@@ -616,10 +622,14 @@ function buildMug() {
   surface.position.y = 0.0632;
   group.add(surface);
 
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.007, 6, 12, Math.PI * 1.2), whiteMat);
+  // XQ-019 把手重修：旧版 rotation.y=π/2 把环面转进 YZ 平面（与杯壁相切竖直），
+  // 环心 x=0.046 又超出杯壁最大半径 0.04 —— 整个环悬空浮在杯外、两端不沾杯身。
+  // 新版：环面回 XY 竖直平面（径向-竖直），半圆弧开口朝 −x 贴杯，
+  // 环心 x=0.036 让两端管口埋进杯壁（该高度壁半径 0.0362~0.0397），凸出杯壁约 0.031。
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.007, 8, 20, Math.PI), whiteMat);
   handle.name = 'mug-handle';
-  handle.position.set(0.046, 0.053, 0);
-  handle.rotation.set(0, Math.PI / 2, -0.3);
+  handle.position.set(0.036, 0.053, 0);
+  handle.rotation.z = -Math.PI / 2;
   handle.castShadow = true;
   group.add(handle);
 
