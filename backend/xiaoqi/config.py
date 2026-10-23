@@ -19,7 +19,7 @@ class Config:
     camera_width: int = 640
     camera_height: int = 480
     camera_fps: int = 30
-    # ---- 视觉：MediaPipe Tasks API（D-009）----
+    # ---- 视觉：MediaPipe Tasks API（D-010）----
     vision_model_path: str = "models/pose_landmarker_lite.task"
     vision_num_poses: int = 1
     vision_min_detection_confidence: float = 0.5
@@ -67,7 +67,7 @@ def load_config(path: str | Path | None = None) -> Config:
     c.camera_height = int(_dig(raw, "camera", "height", default=c.camera_height))
     c.camera_fps = int(_dig(raw, "camera", "fps", default=c.camera_fps))
 
-    # ---- 视觉：MediaPipe Tasks API（D-009）----
+    # ---- 视觉：MediaPipe Tasks API（D-010）----
     c.vision_model_path = str(_dig(raw, "vision", "model_path", default=c.vision_model_path))
     c.vision_num_poses = int(_dig(raw, "vision", "num_poses", default=c.vision_num_poses))
     c.vision_min_detection_confidence = float(
