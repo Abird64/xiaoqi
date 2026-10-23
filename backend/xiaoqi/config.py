@@ -19,6 +19,11 @@ class Config:
     camera_width: int = 640
     camera_height: int = 480
     camera_fps: int = 30
+    # ---- 视觉：MediaPipe Tasks API（D-009）----
+    vision_model_path: str = "models/pose_landmarker_lite.task"
+    vision_num_poses: int = 1
+    vision_min_detection_confidence: float = 0.5
+    vision_min_tracking_confidence: float = 0.5
     neck_delta_deg: float = 15.0
     hunch_delta_deg: float = 28.0
     min_confidence: float = 0.55
@@ -61,6 +66,14 @@ def load_config(path: str | Path | None = None) -> Config:
     c.camera_width = int(_dig(raw, "camera", "width", default=c.camera_width))
     c.camera_height = int(_dig(raw, "camera", "height", default=c.camera_height))
     c.camera_fps = int(_dig(raw, "camera", "fps", default=c.camera_fps))
+
+    # ---- 视觉：MediaPipe Tasks API（D-009）----
+    c.vision_model_path = str(_dig(raw, "vision", "model_path", default=c.vision_model_path))
+    c.vision_num_poses = int(_dig(raw, "vision", "num_poses", default=c.vision_num_poses))
+    c.vision_min_detection_confidence = float(
+        _dig(raw, "vision", "min_detection_confidence", default=c.vision_min_detection_confidence))
+    c.vision_min_tracking_confidence = float(
+        _dig(raw, "vision", "min_tracking_confidence", default=c.vision_min_tracking_confidence))
 
     c.neck_delta_deg = float(_dig(raw, "posture", "neck_delta_deg", default=c.neck_delta_deg))
     c.hunch_delta_deg = float(_dig(raw, "posture", "hunch_delta_deg", default=c.hunch_delta_deg))

@@ -40,7 +40,10 @@ class _BaseThread(threading.Thread):
     def stop(self) -> None:
         self._stop_event.set()
 
-    def _handle(self, obs: PoseObservation) -> None:
+    # 注意：不能叫 _handle —— Python 3.13 的 threading.Thread 在 __init__ 里会设置
+    # 实例属性 self._handle（_thread._ThreadHandle），会遮蔽同名方法，
+    # 调用时直接抛 TypeError: '_thread._ThreadHandle' object is not callable。
+    def _on_observation(self, obs: PoseObservation) -> None:
         if not self.calib.done:
             if self.calib.feed(obs):                 # 校准刚完成
                 self.rules.baseline_neck_deg = self.calib.baseline_neck_deg
@@ -69,9 +72,19 @@ class CaptureThread(_BaseThread):
 
     def __init__(self, *a, estimator: PoseEstimator | None = None, **kw) -> None:
         super().__init__(*a, **kw)
-        self.estimator = estimator or PoseEstimator()
+        self.estimator = estimator or PoseEstimator(self.cfg)
 
     def run(self) -> None:
+        # 姿态链起不来要"喊出来"，不能假装画面里没人（否则前端只会看到 unknown）
+        if not self.estimator.ok:
+            self.last_error = self.estimator.last_error or "姿态估计不可用"
+            log.error("姿态估计不可用：%s", self.last_error)
+            self.hub.publish_threadsafe({
+                "type": "error", "code": "POSE_UNAVAILABLE",
+                "message": self.last_error,
+            })
+            return
+
         cap = None
         while not self._stop_event.is_set():
             try:
@@ -89,7 +102,7 @@ class CaptureThread(_BaseThread):
                     raise RuntimeError("摄像头断流")   # → M1-6：报错但不崩
                 # 降采样靠 _sleep() 控制在 sample_hz（默认 10Hz），
                 # 摄像头 30fps 多出的帧由驱动缓冲丢弃，CPU 不空转。
-                self._handle(self.estimator.infer(frame))
+                self._on_observation(self.estimator.infer(frame))
                 self.last_error = None
                 self._sleep()
             except Exception as e:                       # 断流 / 拔线 → 报错 + 重连
@@ -121,7 +134,7 @@ class SimThread(_BaseThread):
         while not self._stop_event.is_set():
             target, duration = SIM_SCRIPT[idx % len(SIM_SCRIPT)]
             obs = self._synthetic(target)
-            self._handle(obs)
+            self._on_observation(obs)
             elapsed += 1.0 / self.cfg.sample_hz
             if elapsed >= duration:
                 elapsed, idx = 0.0, idx + 1
