@@ -101,6 +101,9 @@ class Store:
           `behavior.level`              → `behavior_level`
           `phone.steps`                 → `steps`
 
+        去重：带 `phone` 的 `kind='state'` 行跳过（`write_event` 已另存
+        `kind='phone'` 行，两处都映射会重复计数）。
+
         v0.1 **不做时间聚合**：库里姿态 / 行为 / 步数是分开的行
         （`kind` = `state` / `behavior` / `phone`），本方法逐行原样映射、
         缺测填 `null`（协议 §4.1「缺测字段用 `null`」）。
@@ -124,6 +127,10 @@ class Store:
         samples: list[dict] = []
         for ts, k, state, metrics_txt, payload_txt in rows:
             payload = json.loads(payload_txt or "{}")
+            if k == "state" and "phone" in payload:
+                # 手机步数事件 write_event 会另存一行 kind='phone'，
+                # 这里的 state 行若再映射 steps 会在 samples 里同 ts 重复计数（M2 统计翻倍），跳过。
+                continue
             metrics = json.loads(metrics_txt or "{}")
             behavior = payload.get("behavior") or {}
             phone = payload.get("phone") or {}
