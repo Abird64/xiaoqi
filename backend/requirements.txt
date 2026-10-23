@@ -4,6 +4,6 @@ uvicorn[standard]>=0.29
 websockets>=12
 numpy>=1.26
 opencv-python>=4.9
-mediapipe>=0.10.14      # CPU 即可，无需 GPU；装不上时用 `--sim` 跑通其余链路
+mediapipe>=1.0            # CPU 即可，无需 GPU；1.x 的 Tasks API（D-010），旧 mp.solutions 已移除
 pyyaml>=6.0
 # Windows 行为采集（W10，成员 C）：pywin32>=306 ; psutil>=5.9

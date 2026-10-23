@@ -24,11 +24,12 @@ from xiaoqi.config import load_config                     # noqa: E402
 from xiaoqi.rules.calibration import Calibration           # noqa: E402
 from xiaoqi.rules.posture_rules import PostureRules        # noqa: E402
 from xiaoqi.state.machine import PoseStateMachine         # noqa: E402
-from xiaoqi.vision.pose_estimator import PoseEstimator     # noqa: E402
+from xiaoqi.vision.pose_estimator import SKELETON, PoseEstimator   # noqa: E402
 
-# MediaPipe BlazePose 骨架连线（33 点里的常用段）
-BONES = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
-         (11, 23), (12, 24), (23, 24), (23, 25), (24, 26)]
+# 官方 35 条骨架连线来自 mediapipe（pose_estimator.SKELETON）；
+# 万一不可用，退回这 10 条手写常用段。
+BONES = SKELETON or [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
+                     (11, 23), (12, 24), (23, 24), (23, 25), (24, 26)]
 
 
 def main() -> int:
@@ -46,13 +47,15 @@ def main() -> int:
         print(f"❌ 需要 opencv-python：{e}", file=sys.stderr)
         return 1
 
-    est = PoseEstimator()
+    cfg = load_config(args.config)
+    est = PoseEstimator(cfg)
     if not est.ok:
-        print("❌ MediaPipe 未安装 —— `pip install mediapipe` 后再跑。"
-              "\n   （链路联调可用 --sim，但 M1-2 骨架线必须真机验收。）", file=sys.stderr)
+        print("❌ 姿态估计不可用：\n" + (est.last_error or "原因未知"),
+              file=sys.stderr)
+        print("\n   （链路联调可用 --sim，但 M1-2 骨架线必须真机验收。）",
+              file=sys.stderr)
         return 1
 
-    cfg = load_config(args.config)
     cap = cv2.VideoCapture(cfg.camera_index)
     if not cap.isOpened():
         print(f"❌ 摄像头 {cfg.camera_index} 打不开 —— 检查 USB 占用与系统权限。",

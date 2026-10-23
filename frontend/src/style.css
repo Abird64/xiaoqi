@@ -1,0 +1,214 @@
+:root {
+  --hud-bg: rgba(20, 24, 30, 0.62);
+  --hud-border: rgba(255, 255, 255, 0.14);
+  --hud-fg: #f2f1ec;
+  --hud-dim: rgba(242, 241, 236, 0.6);
+  --hud-warm: #ffd9a0;
+  --hud-ok: #6fbf5a;
+  --hud-warn: #e8a33d;
+  --hud-info: #6fa8dc;
+  --hud-idle: #9aa0a6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #171a20;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  color: var(--hud-fg);
+}
+
+#scene {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ---- HUD 总层：不挡拖拽（pointer-events: none），交互件单独开 ----
+ * XQ-009 重设计（对齐组长参考图截图）：左上工具条 + 左下伙伴状态卡 + 右上 FPS。
+ */
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 隐形态：只留恢复钮 */
+.hud.is-stealth .hud-toolbar,
+.hud.is-stealth .hud-partner,
+.hud.is-stealth .hud-fps,
+.hud.is-stealth .hud-toast {
+  display: none;
+}
+
+/* ---- 左上：演示工具条 ---- */
+.hud-toolbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: min(56vw, 660px);
+}
+
+.hud-tool {
+  pointer-events: auto;
+  border: 1px solid var(--hud-border);
+  background: var(--hud-bg);
+  color: var(--hud-fg);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.hud-tool:hover {
+  background: rgba(255, 217, 160, 0.2);
+  border-color: rgba(255, 217, 160, 0.55);
+}
+
+.hud-tool:active {
+  transform: scale(0.96);
+}
+
+/* ---- 左下：伙伴状态卡 ---- */
+.hud-partner {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 13px;
+  border-radius: 12px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+
+.hud-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--hud-idle);
+  flex: none;
+}
+
+.hud-dot.is-ok {
+  background: var(--hud-ok);
+  box-shadow: 0 0 8px rgba(111, 191, 90, 0.75);
+}
+
+.hud-dot.is-warn {
+  background: var(--hud-warn);
+  box-shadow: 0 0 8px rgba(232, 163, 61, 0.75);
+}
+
+.hud-dot.is-info {
+  background: var(--hud-info);
+  box-shadow: 0 0 8px rgba(111, 168, 220, 0.75);
+}
+
+.hud-dot.is-idle {
+  background: var(--hud-idle);
+}
+
+.hud-partner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.hud-partner-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--hud-dim);
+}
+
+.hud-partner-value {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 已连数据源：状态点轻呼吸（XQ-006 接 WS 后由 setConnected(true) 触发） */
+.hud-partner.is-live .hud-dot {
+  animation: hud-pulse 2s ease-in-out infinite;
+}
+
+@keyframes hud-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ---- 右上：FPS（M3-6 取证判据，小且淡，不抢画面） ---- */
+.hud-fps {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 11px;
+  color: var(--hud-dim);
+  background: rgba(20, 24, 30, 0.45);
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 底部中间：toast（演示占位提示） ---- */
+.hud-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 60px;
+  transform: translateX(-50%);
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  color: var(--hud-fg);
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.hud-toast.is-on {
+  opacity: 1;
+}
+
+/* ---- 隐形态下的恢复钮 ---- */
+.hud-restore {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  pointer-events: auto;
+  border: 1px solid var(--hud-border);
+  background: var(--hud-bg);
+  color: var(--hud-fg);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.hud-restore[hidden] {
+  display: none;
+}
