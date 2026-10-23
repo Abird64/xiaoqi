@@ -9,6 +9,9 @@ from pathlib import Path
 
 from ..hub import now_ms
 
+# 协议 §4.1 samples 收纳的事件类型（error / reminder 不是样本）
+SAMPLE_KINDS = ("state", "behavior", "phone")
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,6 +88,57 @@ class Store:
              "metrics": json.loads(r[4] or "{}"), "payload": json.loads(r[5] or "{}")}
             for r in rows
         ]
+
+    def query_snapshots(self, from_ms: int | None, to_ms: int | None,
+                        kind: str | None = None,
+                        limit: int = 5000) -> list[dict]:
+        """`GET /api/history` 用：按 `接口协议.md` §4.1 输出 `samples`。
+
+        字段来源（协议 §3.1 的顶层三块）：
+          `pose.state`                  → `pose_state`
+          `pose.metrics.neck_angle_deg` → `neck_angle_deg`
+          `behavior.active_app`         → `behavior_app`
+          `behavior.level`              → `behavior_level`
+          `phone.steps`                 → `steps`
+
+        v0.1 **不做时间聚合**：库里姿态 / 行为 / 步数是分开的行
+        （`kind` = `state` / `behavior` / `phone`），本方法逐行原样映射、
+        缺测填 `null`（协议 §4.1「缺测字段用 `null`」）。
+        消费方（M2 报告）按 `ts` 就近合并；「一行完整快照」所需的聚合窗口
+        大小属产品决策，未定，故不在此实现。
+        """
+        sql = ("SELECT ts,kind,state,metrics,payload FROM events"
+               " WHERE ts >= ? AND ts <= ?")
+        args: list = [from_ms or 0, to_ms or now_ms()]
+        if kind:
+            sql += " AND kind = ?"            # 本站扩展：按事件类型过滤
+            args.append(kind)
+        else:
+            sql += " AND kind IN (?,?,?)"
+            args.extend(SAMPLE_KINDS)
+        sql += " ORDER BY ts DESC LIMIT ?"    # 先取「最近 N 条」
+        args.append(max(1, min(limit, 20000)))
+        with self._lock:
+            rows = self._conn.execute(sql, args).fetchall()
+
+        samples: list[dict] = []
+        for ts, k, state, metrics_txt, payload_txt in rows:
+            payload = json.loads(payload_txt or "{}")
+            metrics = json.loads(metrics_txt or "{}")
+            behavior = payload.get("behavior") or {}
+            phone = payload.get("phone") or {}
+            is_pose = k == "state"
+            samples.append({
+                "ts": ts,
+                "pose_state": state if is_pose else None,
+                "neck_angle_deg": (metrics.get("neck_angle_deg")
+                                   if is_pose else None),
+                "behavior_app": behavior.get("active_app"),
+                "behavior_level": behavior.get("level"),
+                "steps": phone.get("steps"),
+            })
+        samples.reverse()                     # 协议 §4.1：对外按 ts 升序
+        return samples
 
     def close(self) -> None:
         with self._lock:
