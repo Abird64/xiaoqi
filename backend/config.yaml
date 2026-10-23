@@ -11,6 +11,12 @@ camera:
   height: 480
   fps: 30
 
+vision:                  # MediaPipe Tasks API（D-010：1.x 已移除 mp.solutions）
+  model_path: models/pose_landmarker_lite.task   # 相对 backend/；换成 pose_landmarker_full.task 可提升精度
+  num_poses: 1           # 只跟踪一个人
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+
 posture:
   # 判定阈值：相对校准基准的**增量**（个性化，由 calibration 采样定基线）
   neck_delta_deg: 15.0       # 头前倾角比基准大这么多 → slouch
