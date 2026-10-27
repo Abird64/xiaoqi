@@ -42,6 +42,7 @@ body {
 
 /* 隐形态：只留恢复钮 */
 .hud.is-stealth .hud-toolbar,
+.hud.is-stealth .hud-steps,
 .hud.is-stealth .hud-partner,
 .hud.is-stealth .hud-fps,
 .hud.is-stealth .hud-toast {
@@ -81,6 +82,68 @@ body {
 
 .hud-tool:active {
   transform: scale(0.96);
+}
+
+/* ---- 左下：今日步数卡（XQ-006 手机同步；无数据 / 待同步 / 已同步 三态） ---- */
+.hud-steps {
+  position: absolute;
+  left: 14px;
+  bottom: 74px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 128px;
+  padding: 8px 13px 9px;
+  border-radius: 12px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+
+.hud-steps-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--hud-dim);
+}
+
+.hud-steps-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.hud-steps-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-steps-unit {
+  font-size: 12px;
+  color: var(--hud-dim);
+}
+
+.hud-steps-note {
+  font-size: 11px;
+  color: var(--hud-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 三态配色：同步成功=正常白、待同步/断连=提醒橙、无数据=灰 */
+.hud-steps[data-tone="warn"] .hud-steps-value {
+  color: var(--hud-warn);
+}
+
+.hud-steps[data-tone="warn"] .hud-steps-note {
+  color: var(--hud-warn);
+  opacity: 0.85;
+}
+
+.hud-steps[data-tone="idle"] .hud-steps-value {
+  font-size: 16px;
+  color: var(--hud-idle);
 }
 
 /* ---- 左下：伙伴状态卡 ---- */

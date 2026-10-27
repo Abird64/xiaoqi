@@ -4,13 +4,13 @@
  *
  * 结构（照参考图截图）：
  *   - 左上：演示工具条 10 钮（视角方式/电脑设置/配置/导入/隐形/镜子/日历/水杯/监视/相机）
- *   - 左下：伙伴状态卡（正直（健康）式样 + 状态点）
+ *   - 左下：今日步数卡（XQ-006 手机同步）+ 伙伴状态卡（正直（健康）式样 + 状态点）
  *   - 右上：FPS（M3-6 取证用，小且淡）
  *   - 底部中间：toast（演示占位提示，1.6s 自灭）
  *
  * 数据契约：来自后端的文案一律 textContent 写入，不用 innerHTML（防注入）。
- * 伙伴状态当前由 ?state= URL 参数驱动（XQ-009 可逆假设 A-3），
- * XQ-006 接 WS 后替换数据源；setState / setConnected 接口形式保持不变。
+ * 伙伴状态与步数由 main.js 接 WS 后驱动（XQ-006）；setState / setSteps / setConnected
+ * 只接收「已经算好的展示文案」，三态判定在 steps.js 里，HUD 不认识协议字段。
  */
 
 /** 伙伴状态枚举 → 展示文案 + 状态点色调（与后端 machine.py 6 值枚举对齐） */
@@ -39,6 +39,14 @@ export function createHud({ onTool, initialState = 'upright', showToolbar = true
     <div class="hud-toolbar" data-hud="toolbar">
       ${TOOLS.map(([id, label]) => `<button class="hud-tool" type="button" data-tool="${id}">${label}</button>`).join('')}
     </div>
+    <div class="hud-steps" data-hud="steps" data-tone="idle">
+      <span class="hud-steps-label">今日步数</span>
+      <span class="hud-steps-row">
+        <span class="hud-steps-value" data-hud="steps-value">无数据</span>
+        <span class="hud-steps-unit" data-hud="steps-unit"></span>
+      </span>
+      <span class="hud-steps-note" data-hud="steps-note">等待手机同步</span>
+    </div>
     <div class="hud-partner" data-hud="partner">
       <span class="hud-dot is-idle" data-hud="dot"></span>
       <span class="hud-partner-body">
@@ -53,6 +61,10 @@ export function createHud({ onTool, initialState = 'upright', showToolbar = true
   document.body.appendChild(root);
 
   const toolbarEl = root.querySelector('[data-hud="toolbar"]');
+  const stepsEl = root.querySelector('[data-hud="steps"]');
+  const stepsValueEl = root.querySelector('[data-hud="steps-value"]');
+  const stepsUnitEl = root.querySelector('[data-hud="steps-unit"]');
+  const stepsNoteEl = root.querySelector('[data-hud="steps-note"]');
   const partnerEl = root.querySelector('[data-hud="partner"]');
   const dotEl = root.querySelector('[data-hud="dot"]');
   const stateEl = root.querySelector('[data-hud="state"]');
@@ -61,6 +73,9 @@ export function createHud({ onTool, initialState = 'upright', showToolbar = true
   const restoreEl = root.querySelector('[data-hud="restore"]');
 
   if (!showToolbar) toolbarEl.hidden = true;
+
+  // 步数卡的上次渲染签名：rel time 每 10s 重算，签名不变就别碰 DOM
+  let stepsSignature = '';
 
   // ---- 工具条：点击 → onTool(id)。按钮只做镜头快捷跳转，不承载业务入口 ----
   toolbarEl.addEventListener('click', (e) => {
@@ -110,6 +125,22 @@ export function createHud({ onTool, initialState = 'upright', showToolbar = true
     /** 是否已连上数据源（XQ-006 接 WS 后调用；当前只切样式类） */
     setConnected(connected) {
       partnerEl.classList.toggle('is-live', Boolean(connected));
+    },
+    /**
+     * 今日步数三态（XQ-006）。只吃 steps.js 算好的展示字段：
+     *   { value: '3,210' | '', unit: '步', note: '3 分钟前同步', tone: 'ok'|'warn'|'idle' }
+     * value 为空表示「无数据」——A-04 要求此时写「无数据」，不能补 0。
+     * 每 10s 会重算一次相对时间，签名没变就不动 DOM（避免读数闪烁）。
+     */
+    setSteps(view) {
+      const v = view || {};
+      const signature = [v.value, v.unit, v.note, v.tone].join('|');
+      if (signature === stepsSignature) return;
+      stepsSignature = signature;
+      stepsEl.dataset.tone = v.tone || 'idle';
+      stepsValueEl.textContent = v.value || '无数据';
+      stepsUnitEl.textContent = v.value ? v.unit || '' : '';
+      stepsNoteEl.textContent = v.note || '';
     },
     showToast,
     setStealth,
