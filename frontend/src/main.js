@@ -211,7 +211,8 @@ if (startView && VIEWS[startView]) {
   viewer.flyTo(VIEWS[startView].pos, VIEWS[startView].tgt, 1);
 }
 
-/** 物件高亮脉冲：把组内所有带 emissive 的材质临时点暖，1100ms 后原样还原 */function pulse(name, ms = 1100) {
+/** 物件高亮脉冲：把组内所有带 emissive 的材质临时点暖，1100ms 后原样还原 */
+function pulse(name, ms = 1100) {
   const obj = scene.getObjectByName(name);
   if (!obj) return;
   const mats = new Set();

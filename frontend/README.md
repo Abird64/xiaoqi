@@ -104,7 +104,7 @@ test/                steps / live 的 node 逻辑测试（不依赖浏览器）
   | `offline` | WS 断开 | 保留最后数值，note 变「连接中断」 |
 - **两个呈现位**：左下 HUD 步数卡（伙伴状态卡上方，`隐形` 模式下一起隐藏）；挂历正面的卡面（`scene/calendarFace.js`，CanvasTexture 贴在 z=0.0144，压在日历格子之上、让开月份带）。文字走贴图而不是 HTML 覆盖层——后者只能贴屏幕坐标，镜头一动就穿帮。
 - **刷新节奏**：收到帧渲染一次，另外每 10s 兜底重渲染——「N 分钟前」和 15 分钟老化不会因为没新帧就不动。
-- **测试**：`npm test`（`node --test test/`）。若环境不允许 `node --test` 起子进程，逐文件跑 `node test/steps.test.mjs`、`node test/live.test.mjs` 即可，两套都不碰浏览器与真实网络。
+- **测试**：`npm test`（`node --test`）。若环境不允许 `node --test` 起子进程，逐文件跑 `node test/steps.test.mjs`、`node test/live.test.mjs` 即可，两套都不碰浏览器与真实网络。
 
 ## 坐标约定（加任何东西都按这个来）
 

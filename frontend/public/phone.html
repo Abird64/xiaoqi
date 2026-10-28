@@ -206,7 +206,7 @@
           const hasValue = phone && typeof phone.steps === 'number';
           curEl.textContent = hasValue ? `${phone.steps.toLocaleString('zh-CN')} 步` : '无数据';
           curEl.className = hasValue ? '' : 'is-warn';
-          ageEl.textContent = hasValue ? formatAge(Date.now() - phone.updated_ts * 1000) : '—';
+          ageEl.textContent = hasValue ? formatAge(Date.now() - phone.updated_ts) : '—';
           linkEl.textContent = hasValue ? (phone.stale ? '已连接 · 数据待同步' : '已连接') : '已连接 · 还没有数据';
           linkEl.className = hasValue ? (phone.stale ? 'is-warn' : 'is-ok') : 'is-warn';
         } catch {
