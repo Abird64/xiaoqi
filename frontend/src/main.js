@@ -15,12 +15,21 @@
  * XQ-009 改动：
  *   5. HUD 重设计（伙伴状态卡 + 演示工具条），URL 参数 ?state= / ?hud=0
  *   6. 工具条 → viewer.flyTo 镜头跳转 + 物件高亮脉冲（演示辅助层，入口仍是点物件）
+ *
+ * XQ-006 改动（手机步数同步的电脑端呈现）：
+ *   7. 接后端 WS /ws：hello/state 里的 pose → 伙伴状态卡，phone → 今日步数卡
+ *   8. 挂历正面叠一张 CanvasTexture 卡面，房间视角下也能看到当日步数
+ *   9. URL 参数：?live=0 关掉 WS（纯离线演示）、?ws=<host|url> 换后端
  */
 import * as THREE from 'three';
 import './style.css';
 import { createRoom } from './scene/room.js';
+import { NAME } from './scene/materials.js';
+import { createCalendarFace } from './scene/calendarFace.js';
 import { createViewer } from './viewer.js';
 import { createHud } from './hud.js';
+import { createLive } from './live.js';
+import { describePhone } from './steps.js';
 
 const params = new URLSearchParams(location.search);
 // 数值型 URL 参数：缺省 / 非数字 → undefined（沿用默认机位）
@@ -55,7 +64,14 @@ const viewer = createViewer(canvas, {
 });
 
 // ---- 房间 ----
-scene.add(createRoom({ grid: params.get('grid') !== '0' }));
+const room = createRoom({ grid: params.get('grid') !== '0' });
+scene.add(room);
+
+// ---- 挂历正面：当日步数卡面（XQ-006） ----
+// 日历是「当日健康概览」的物件位（UC-04），文字只能走贴图 —— 相机一动 HTML 覆盖层就穿帮。
+const calendarFace = createCalendarFace();
+const calendarGroup = room.getObjectByName(NAME.calendar);
+if (calendarGroup) calendarGroup.add(calendarFace.mesh);
 
 // ---- HUD ----
 const hud = createHud({
@@ -64,6 +80,96 @@ const hud = createHud({
   showToolbar: params.get('hud') !== '0',
 });
 hud.setState(params.get('state') || 'upright');
+
+// ============================================================
+// XQ-006 数据链：WS /ws → 伙伴状态 / 今日步数
+// ============================================================
+
+/** WS 上的 phone 快照（hello 全量 / state 增量）；null = 还没收到过手机数据 */
+let phone = null;
+/** ?live=0 → 纯离线演示：不连 WS，步数卡停在「无数据」 */
+const liveEnabled = params.get('live') !== '0';
+let liveConnected = false;
+let everOpened = false;
+
+/**
+ * 展示层用的「是否连着数据源」：首帧还在握手时别急着写「未连接」，
+ * 否则页面刚打开的一瞬间卡片会闪一下「未连接数据源」再变回「等待手机同步」。
+ */
+function connectedForDisplay() {
+  if (!liveEnabled) return true;
+  return liveConnected || !everOpened;
+}
+
+/** phone 快照 → 三态文案；同一次刷新里 HUD 卡片与挂历卡面用同一份判定 */
+function renderPhone() {
+  const view = describePhone(phone, { now: Date.now(), connected: connectedForDisplay() });
+  hud.setSteps(view);
+  calendarFace.update(view);
+  return view;
+}
+
+function applyPose(pose) {
+  if (pose && typeof pose === 'object' && pose.state) hud.setState(pose.state);
+}
+
+function applyHello(msg) {
+  if ('phone' in msg) phone = msg.phone ?? null; // 全量快照：没有 phone 就是没有手机数据
+  applyPose(msg.pose);
+  renderPhone();
+}
+
+function applyState(msg) {
+  if (msg.phone) phone = msg.phone; // 增量帧只带变化字段
+  applyPose(msg.pose);
+  renderPhone();
+}
+
+const REMINDER_TEXT = { water: '该喝水了', standup: '该起身活动一下', focus: '专注时段结束' };
+
+function handleReminder(msg) {
+  hud.showToast(msg.text || REMINDER_TEXT[msg.kind] || '伙伴有提醒');
+}
+
+function handleStatus(status) {
+  const was = liveConnected;
+  liveConnected = status === 'open';
+  if (liveConnected) everOpened = true;
+  hud.setConnected(liveConnected);
+  if (was !== liveConnected) {
+    hud.showToast(liveConnected ? '已连上数据源' : '数据连接中断 · 重试中');
+  }
+  renderPhone();
+}
+
+/** ?ws= 可写完整 ws:// 地址、路径，或只写 host:port（vite dev 代理时最省事） */
+function resolveWsUrl() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const override = params.get('ws');
+  if (override) {
+    if (/^wss?:\/\//i.test(override)) return override;
+    if (override.startsWith('/')) return `${proto}//${location.host}${override}`;
+    return `${proto}//${override.replace(/^\/+/, '')}/ws`;
+  }
+  return `${proto}//${location.host}/ws`;
+}
+
+renderPhone(); // 首帧先按「无数据」渲染，WS 连上之前卡片也不空着
+// 相对时间与 15 分钟 stale 判定会随时间漂移，光等 WS 帧不会自己更新
+setInterval(renderPhone, 10_000);
+
+const live = liveEnabled
+  ? createLive({
+      url: resolveWsUrl(),
+      onStatus: handleStatus,
+      onHello: applyHello,
+      onState: applyState,
+      onReminder: handleReminder,
+    })
+  : null;
+
+// 关标签页时主动断开，别让服务端留一堆死连接
+window.addEventListener('pagehide', () => live?.close());
 
 // ============================================================
 // XQ-009 演示工具条：镜头快捷跳转 + 物件高亮
@@ -93,10 +199,17 @@ const TOOL_MAP = {
   import:   { view: 'monitor',  target: 'monitor',    toast: '演示占位 · 手动导入健康数据在电脑屏「导入」窗' },
   monitor:  { view: 'monitor',  target: 'monitor',    toast: '演示占位 · 显示器 = 前台应用时长可视化位（XQ-006）' },
   mirror:   { view: 'mirror',   target: 'mirror',     toast: '演示占位 · 镜子 = 坐姿校准入口（UC-01/07）' },
-  calendar: { view: 'calendar', target: 'calendar',   toast: '演示占位 · 日历本 = 当日健康概览（UC-04）' },
+  // 日历的 toast 不再写死：点它时读当前步数快照（见 calendarToast）
+  calendar: { view: 'calendar', target: 'calendar',   toast: null },
   mug:      { view: 'mug',      target: 'mug',        toast: '演示占位 · 水杯 = 标记喝水（UC-03）' },
   camera:   { view: 'camera',   target: 'web-camera', toast: '演示占位 · 小相机 = 隐私状态快捷入口（UC-10）' },
 };
+
+// 直达机位：?view=calendar / desk / ... —— 截图取证与演示脚本用（工具条之外的第二个入口）
+const startView = params.get('view');
+if (startView && VIEWS[startView]) {
+  viewer.flyTo(VIEWS[startView].pos, VIEWS[startView].tgt, 1);
+}
 
 /** 物件高亮脉冲：把组内所有带 emissive 的材质临时点暖，1100ms 后原样还原 */
 function pulse(name, ms = 1100) {
@@ -110,6 +223,13 @@ function pulse(name, ms = 1100) {
   const prev = list.map((m) => m.emissive.getHex());
   list.forEach((m) => m.emissive.setHex(0xffd9a0));
   setTimeout(() => list.forEach((m, i) => m.emissive.setHex(prev[i])), ms);
+}
+
+/** 点「日历」时把当日步数念出来 —— 让演示现场不必凑近墙上的卡面 */
+function calendarToast() {
+  const v = renderPhone();
+  const head = v.state === 'none' ? '今日步数：无数据' : `今日 ${v.value} 步`;
+  return `日历本 · ${head} · ${v.note}`;
 }
 
 function handleTool(tool) {
@@ -130,7 +250,7 @@ function handleTool(tool) {
   viewer.flyTo(v.pos, v.tgt);
   // 飞行约 850ms 后镜头到位，此时点亮目标物件
   setTimeout(() => pulse(m.target), 850);
-  hud.showToast(m.toast);
+  hud.showToast(tool === 'calendar' ? calendarToast() : m.toast);
 }
 
 // ---- 自适应窗口 ----
@@ -157,5 +277,5 @@ renderer.setAnimationLoop(() => {
 // （F12 → __xiaoqi.scene.getObjectByName('room')）
 // 只在开发期挂载 —— 生产构建带上它等于把内部对象对外暴露。
 if (import.meta.env.DEV) {
-  window.__xiaoqi = { THREE, scene, renderer, viewer, hud };
+  window.__xiaoqi = { THREE, scene, renderer, viewer, hud, live, phone: () => phone, calendarFace };
 }

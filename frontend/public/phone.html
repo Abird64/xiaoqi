@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!-- 手机端唯一入口：浏览器地址栏只能发 GET，而协议要求 POST + JSON + 令牌头，
+         所以这里用一张页面把这件事做完，手机上不装任何 App 也能上报。 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1c1f24" />
+    <title>小栖 · 步数上报</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #171a1f;
+        --card: #1f242b;
+        --border: #313843;
+        --fg: #e8eaed;
+        --dim: #9aa3ae;
+        --ok: #6bbf59;
+        --warn: #d99a3a;
+        --err: #d9695f;
+        --radius: 14px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+        -webkit-text-size-adjust: 100%;
+      }
+      h1 { font-size: 20px; margin: 0 0 6px; letter-spacing: 0.02em; }
+      .sub { margin: 0 0 18px; color: var(--dim); font-size: 13px; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px 14px;
+        margin-bottom: 16px;
+      }
+      .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; }
+      .row > span:first-child { color: var(--dim); }
+      .row strong { font-variant-numeric: tabular-nums; }
+      .row .is-ok { color: var(--ok); }
+      .row .is-warn { color: var(--warn); }
+      .row .is-err { color: var(--err); }
+      form { display: grid; gap: 14px; }
+      label { display: grid; gap: 6px; font-size: 13px; color: var(--dim); }
+      input {
+        width: 100%;
+        min-height: 48px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #14171c;
+        color: var(--fg);
+        font-size: 17px; /* ≥16px 才不会让 iOS 聚焦时缩放 */
+        font-variant-numeric: tabular-nums;
+      }
+      input:focus { outline: 2px solid #4a7ebb; outline-offset: 1px; }
+      button {
+        min-height: 50px;
+        border: 0;
+        border-radius: 12px;
+        background: #4a7ebb;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+      button:disabled { opacity: 0.55; }
+      .result { min-height: 22px; margin: 4px 0 0; font-size: 14px; }
+      .result.is-ok { color: var(--ok); }
+      .result.is-warn { color: var(--warn); }
+      .result.is-err { color: var(--err); }
+      details { margin-top: 22px; color: var(--dim); font-size: 13px; }
+      summary { cursor: pointer; color: var(--fg); font-size: 14px; }
+      details ul { padding-left: 18px; margin: 10px 0 0; }
+      details li { margin: 6px 0; }
+      code {
+        padding: 1px 5px;
+        border-radius: 5px;
+        background: #101318;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>小栖 · 手机步数</h1>
+      <p class="sub">把今日步数送进房间。只走局域网，不经过任何第三方服务。</p>
+
+      <section class="card" aria-label="当前服务端状态">
+        <div class="row"><span>服务端已记录</span><strong id="cur">—</strong></div>
+        <div class="row"><span>最后更新</span><span id="age">—</span></div>
+        <div class="row"><span>连接</span><span id="link">检测中…</span></div>
+      </section>
+
+      <form id="form" novalidate>
+        <label for="steps">
+          今日累计步数
+          <input id="steps" name="steps" type="number" inputmode="numeric" min="0" step="1"
+                 placeholder="例如 8123" autocomplete="off" required />
+        </label>
+        <label for="device">
+          设备标识（60 秒内同标识重复上报会被幂等丢弃）
+          <input id="device" name="device" type="text" autocomplete="off" spellcheck="false" />
+        </label>
+        <label for="token">
+          上报令牌
+          <input id="token" name="token" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="留空则自动读取本机 /api/token" />
+        </label>
+        <button id="submit" type="submit">上报步数</button>
+      </form>
+
+      <p id="result" class="result" role="status" aria-live="polite"></p>
+
+      <details>
+        <summary>这是什么？为什么要手填？</summary>
+        <ul>
+          <li>浏览器拿不到系统步数（没有 Health Connect / 健康 App 的读取权限），所以这里只能手填，或从健康 App 里看一眼今日累计再填。</li>
+          <li>真正自动同步要靠手机 App（决策 D-009 的自研 Android App），目前仓库里还没有这个 App。</li>
+          <li>协议里 <code>steps</code> 必须是整数；<code>0</code> 是合法值，不传数字会返回 <code>400 INVALID_FIELD</code>。</li>
+          <li>服务端只记当日最大值，传比现在小的数会被当成跨零点重置。</li>
+          <li>电脑端房间的画面会自动刷新（WebSocket 推送），不需要手动刷新页面。</li>
+        </ul>
+      </details>
+    </main>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const params = new URLSearchParams(location.search);
+      const STORAGE_KEY = 'xiaoqi.phone';
+
+      const stepsEl = $('steps');
+      const deviceEl = $('device');
+      const tokenEl = $('token');
+      const submitEl = $('submit');
+      const resultEl = $('result');
+      const curEl = $('cur');
+      const ageEl = $('age');
+      const linkEl = $('link');
+
+      /** 上次填过的设备标识/令牌留在本机，省得每次重输 */
+      function loadSaved() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+          if (saved.device) deviceEl.value = saved.device;
+          if (saved.token) tokenEl.value = saved.token;
+        } catch {
+          /* 隐私模式下 localStorage 会抛错，忽略即可 */
+        }
+        deviceEl.value ||= 'phone-web';
+        // 快捷方式可以带参数预填：/phone.html?steps=8123
+        if (params.get('steps')) stepsEl.value = params.get('steps');
+        if (params.get('token')) tokenEl.value = params.get('token');
+      }
+
+      function save() {
+        try {
+          localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({ device: deviceEl.value.trim(), token: tokenEl.value.trim() })
+          );
+        } catch {
+          /* 同上 */
+        }
+      }
+
+      /** 令牌留空时从后端自取（该接口目前不鉴权，属已知缺口，仅局域网演示可用） */
+      async function ensureToken() {
+        if (tokenEl.value.trim()) return tokenEl.value.trim();
+        try {
+          const r = await fetch('/api/token', { cache: 'no-store' });
+          if (!r.ok) return '';
+          const data = await r.json();
+          tokenEl.value = data.token || '';
+          return tokenEl.value.trim();
+        } catch {
+          return '';
+        }
+      }
+
+      function setResult(text, kind = '') {
+        resultEl.textContent = text;
+        resultEl.className = `result ${kind}`;
+      }
+
+      function formatAge(ms) {
+        if (ms == null) return '—';
+        const sec = Math.max(0, Math.round(ms / 1000));
+        if (sec < 60) return '刚刚';
+        if (sec < 3600) return `${Math.round(sec / 60)} 分钟前`;
+        if (sec < 86400) return `${Math.round(sec / 3600)} 小时前`;
+        return `${Math.round(sec / 86400)} 天前`;
+      }
+
+      /** 拉一次服务端快照，让用户提交前就看到现在记的是什么 */
+      async function refresh() {
+        try {
+          const r = await fetch('/api/state', { cache: 'no-store' });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const state = await r.json();
+          const phone = state.phone || null;
+          const hasValue = phone && typeof phone.steps === 'number';
+          curEl.textContent = hasValue ? `${phone.steps.toLocaleString('zh-CN')} 步` : '无数据';
+          curEl.className = hasValue ? '' : 'is-warn';
+          ageEl.textContent = hasValue ? formatAge(Date.now() - phone.updated_ts) : '—';
+          linkEl.textContent = hasValue ? (phone.stale ? '已连接 · 数据待同步' : '已连接') : '已连接 · 还没有数据';
+          linkEl.className = hasValue ? (phone.stale ? 'is-warn' : 'is-ok') : 'is-warn';
+        } catch {
+          linkEl.textContent = '连不上后端';
+          linkEl.className = 'is-err';
+        }
+      }
+
+      const ERROR_TEXT = {
+        BAD_TOKEN: '令牌不对：检查输入，或留空让页面自动读取。',
+        INVALID_FIELD: '字段不合法：steps 必须是 ≥0 的整数。',
+      };
+
+      async function submit(event) {
+        event.preventDefault();
+        const raw = stepsEl.value.trim();
+        const steps = Number(raw);
+        if (!raw || !Number.isInteger(steps) || steps < 0) {
+          setResult('请输入一个不小于 0 的整数步数。', 'is-warn');
+          return;
+        }
+
+        const token = await ensureToken();
+        if (!token) {
+          setResult('拿不到令牌：手动填一下，或确认后端在运行。', 'is-err');
+          return;
+        }
+        save();
+
+        submitEl.disabled = true;
+        setResult('上报中…');
+        try {
+          const r = await fetch('/api/ingest/health', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Xiaoqi-Token': token },
+            body: JSON.stringify({ steps, device_id: deviceEl.value.trim() || 'phone-web', source: 'phone-web' }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (r.ok && data.ok && data.deduped) {
+            setResult('已上报，但 60 秒内的重复上报被幂等丢弃了（等一分钟再试）。', 'is-warn');
+          } else if (r.ok && data.ok) {
+            setResult(`上报成功：${steps.toLocaleString('zh-CN')} 步。电脑端画面应已刷新。`, 'is-ok');
+          } else {
+            setResult(`上报失败（${r.status}）：${ERROR_TEXT[data.error] || data.error || '未知错误'}`, 'is-err');
+          }
+        } catch (err) {
+          setResult(`发不出去：${err.message}。确认手机和电脑在同一网络。`, 'is-err');
+        } finally {
+          submitEl.disabled = false;
+          refresh();
+        }
+      }
+
+      loadSaved();
+      ensureToken();
+      refresh();
+      setInterval(refresh, 10_000); // 电脑端或别处改了步数，这里也跟着变
+      $('form').addEventListener('submit', submit);
+    </script>
+  </body>
+</html>
