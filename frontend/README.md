@@ -1,7 +1,9 @@
 # 小栖 · 前端（呈现层）
 
 owner：**A（张鹏）** ｜ 模块：W6 场景 · W7 健康伙伴 · W8 信息可视化
+
 当前进度：**XQ-009 视觉精修**（XQ-003 房间骨架 + 程序化贴图 / 窗外城市景观 / 吊灯光晕 / 闹钟绿植重做 / HUD 演示工具条）+ **XQ-006 手机步数数据链**（WS 接线 / 左下步数卡 / 挂历卡面）。M1 阶段**不做美术、不做动画补间**。
+
 
 ## 跑起来
 
@@ -57,6 +59,7 @@ cd ../backend && python -m xiaoqi    # 后端一条命令托管前端，单端�
 
 ```
 src/
+├── main.js          装配：渲染器 → 场景 → 相机 → 房间 → 伙伴 → HUD → 循环
 ├── main.js          装配：渲染器 → 场景 → 相机 → 房间 → HUD → 数据链 → 循环
 ├── viewer.js        相机 + OrbitControls（不许钻到地板下）；XQ-009 增加 flyTo 平滑飞行
 ├── hud.js           信息层：伙伴状态卡 + 步数卡 + 演示工具条（10 钮）+ FPS
@@ -64,7 +67,7 @@ src/
 ├── steps.js         XQ-006：phone 快照 → 三态文案（纯函数，无 DOM 依赖，可单测）
 └── scene/
     ├── room.js      房间组装 + 13 件家具构建函数（XQ-009：窗外景观/光晕/闹钟/绿植重做）
-    ├── calendarFace.js XQ-006：挂历正面当日步数卡面（CanvasTexture）
+    ├── partner.js   XQ-004 新增：健康伙伴程序化建模 + 六状态姿态机
     ├── textures.js  XQ-009 新增：CanvasTexture 程序化贴图（墙纸暗纹 / 木地板 / 城市景观 / 光晕）
     └── materials.js 粘土风材质工厂 + 配色表 + 物件名常量（XQ-003 新增）
 public/assets/       W9 素材：glTF 模型与贴图（Vite 原样拷进 dist/assets/）
@@ -136,7 +139,7 @@ test/                steps / live 的 node 逻辑测试（不依赖浏览器）
 | 桌面 | 水杯 / 盆栽 | `mug` `plant` |
 | 墙面 | 镜子 / 日历本 | `mirror` `calendar` |
 | 照明 | 吊灯 + 4 光源 | `lamp` `light-hemi` `light-lamp` `light-spot` `light-sky` |
-| 占位 | 健康伙伴（XQ-004 建几何体） | `partner` |
+| 角色 | 健康伙伴（XQ-004，`scene/partner.js` 程序化生成） | `partner` |
 
 屏幕 HTML 覆盖层用 `screen-anchor` 对齐（XQ-004/005 用）。
 
@@ -150,6 +153,76 @@ test/                steps / live 的 node 逻辑测试（不依赖浏览器）
 - **补光两盏不投影**：`light-fill-top`（顶部柔光）+ `light-ambient` —— 只投影的话，桌面背光侧的地板会掉到近黑
 
 配色表集中在 `materials.js` 的 `PALETTE`，与 `小栖 界面原型.md` §8.2 一致，**勿单处改动**。
+
+## 健康伙伴（XQ-004 · `scene/partner.js`）
+
+造型照 `Downloads/怪物形象三视图绘制.png`（正/侧/背）+ 同名 `.jpeg`（正视特写）自建：
+蓝粘土小怪、占身高一半的大头、一只几乎占满脸的大眼、两根外弯的角、咧嘴两颗獠牙、粗短四肢、背后一截尾巴。
+
+**为什么自建而不是用下载的 glb / usdz**：M3-2 要「≥4 个姿态状态有不同表现」、M3-3 要「切换有过渡补间」，
+而下载的两个模型都是**单网格静态件**（50,004 面 / 454,314 面，均无骨架、无 animation clip、无可拆节点），
+只能整物体倾斜。程序化搭的版本天生可拆，状态切换只改旋转与位移。
+
+### 比例（含角总高 1.02 m 的基准模型，最后整体乘 `height`）
+
+| 部位 | 高度区间 | 说明 |
+|---|---|---|
+| 脚掌 | 0 ~ 0.078 | 圆角盒，平底 |
+| 腿 | 0.078 ~ 0.16 | 短桩，正面基本被肚子盖住 |
+| 肚子 | 0.13 ~ 0.53 | 梨形（`pear()` 横向收缩），最宽 0.40 m |
+| 头 | 0.485 ~ 0.985 | 直径 0.50 m，眼径 0.29 m（头宽的 58%，照参考图量） |
+| 角 | — | 尖端到 1.03，中段外鼓 1.05R 才读成牛角而不是猫耳 |
+
+进场身高 **1.2 m**：1.0 m 在默认机位下只占 6% 画面高，太不起眼；再高就挡住显示器。
+
+### 可拆节点（状态驱动靠它们）
+
+```
+partner (group, 原点 = 脚底)
+├── partner-hips      躯干/头/手/尾的俯仰枢轴
+│   ├── partner-body
+│   ├── partner-arm-l / partner-arm-r   ← 肩点，含 partner-hand-* 与 partner-cup-*
+│   ├── partner-head   ← 颈点
+│   │   └── partner-skull / partner-eye / partner-gaze / partner-mouth / partner-horn-*
+│   └── partner-tail
+└── partner-leg-l / partner-leg-r       ← 挂在 root 上，不随躯干俯仰
+```
+
+### 六个状态（键与后端 `machine.py` / HUD 完全一致）
+
+| 键 | 表现 | 关键参数（弧度） |
+|---|---|---|
+| `upright` | 站直、胸口打开 | `bodyPitch 0.02` / `headPitch -0.04` |
+| `slouch` | 上背弯、头前探下垂、人矮一截 | `bodyPitch 0.13` / `headPitch 0.10` / `sink -0.030` |
+| `desk_hunch` | 整个人往桌面前压、双臂前伸、眼珠反向上瞟看屏幕 | `bodyPitch 0.22` / `armFwd 0.80` / `gazeY 0.030` |
+| `away` | 头偏开、眼珠斜瞟、手臂松垮 | `headYaw 0.55` / `gazeX -0.032` |
+| `drinking` | 头低向杯口、左手端杯贴嘴 | `armFwdL 1.40` / `armOutL -0.42` / `headYaw 0.30` |
+| `unknown` | 站直但茫然，头微偏、眼珠上瞟 | `headYaw -0.16` / `gazeY 0.016` |
+
+> 姿态不是硬切：`update(dt)` 用 `1 - e^(-6.5·dt)` 向目标插值（与帧率无关），约 0.4 s 到位；再叠加呼吸与尾巴轻摆。
+>
+> **头部随俯仰抬头补偿**：`head.position.y = (NECK_Y-HIP_Y) + bodyPitch·0.38 + max(0, headPitch)·0.16`。
+> 躯干绕胯点转时肚子前沿会往 +z 顶，不补偿的话伏案/驼背的下巴会被肚子吃掉（嘴被挡、只剩半只眼）。
+> **喝水不能举杯到嘴**：手臂全长只有 0.22 m，抬平也就到 0.43 m，而嘴在 0.60 m——所以是「头低下去凑杯口」，
+> 杯子挂点 `(-0.05, -0.24, 0.06)` 是反解出来的（杯口落点距嘴 5.5 cm、且比手心更靠镜头，避免被手挡）。
+
+### 用起来
+
+```js
+import { createPartner } from './scene/partner.js';
+const partner = createPartner({ height: 1.2 });
+room.add(partner.group);
+partner.setState('slouch');          // 切目标姿态，过渡由 update 补
+renderer.setAnimationLoop((t) => { timer.update(t); partner.update(timer.getDelta()); ... });
+```
+
+演示期快捷：URL `?state=<键>`，或键盘 **1–6**（坐直/驼背/伏案/离开/喝水/检测中）。
+控制台 `__xiaoqi.partner.getPose()` 可看插值后的实时姿态数值。
+
+### 面数预算
+
+伙伴 **13,354** 三角面 / 34 个 mesh；整个场景 43,166 面 / 196 mesh。角色占场景面数约 31%，
+比房间（28 个圆角盒 + 30 个基本体）重，但仍是「一个角色」的量级，M3-6 的 30 FPS 判据要在真机 GPU 上跑。
 
 ## 机位
 

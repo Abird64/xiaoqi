@@ -50,6 +50,13 @@ body {
 }
 
 /* ---- 左上：演示工具条 ---- */
+/* ?hud=0 → toolbarEl.hidden = true。必须显式写这一条：
+   上面 .hud-toolbar 的 display:flex 是作者样式，会盖掉浏览器默认的 [hidden]{display:none}，
+   不补这行 `?hud=0` 实际不生效（录屏时工具条一直挂在画面左上）。 */
+.hud-toolbar[hidden] {
+  display: none;
+}
+
 .hud-toolbar {
   position: absolute;
   top: 14px;

@@ -24,12 +24,10 @@
 import * as THREE from 'three';
 import './style.css';
 import { createRoom } from './scene/room.js';
-import { NAME } from './scene/materials.js';
-import { createCalendarFace } from './scene/calendarFace.js';
+import { createPartner, PARTNER_STATES } from './scene/partner.js';
 import { createViewer } from './viewer.js';
 import { createHud } from './hud.js';
-import { createLive } from './live.js';
-import { describePhone } from './steps.js';
+import { setupStudio } from './studio.js';
 
 const params = new URLSearchParams(location.search);
 // 数值型 URL 参数：缺省 / 非数字 → undefined（沿用默认机位）
@@ -67,6 +65,18 @@ const viewer = createViewer(canvas, {
 const room = createRoom({ grid: params.get('grid') !== '0' });
 scene.add(room);
 
+// ---- 健康伙伴（XQ-004）----
+// 站在椅子左前方、面向房间内（≈ 相机方向），这样从默认机位看得到正脸：
+// 房间的椅子朝 -z（对着桌子），若让它坐进椅子，默认机位看到的会是后脑勺。
+// 身高 1.2 m：坐在桌上会挡住显示器，站在地上放 1.0 m 又太不起眼（默认机位下只有 6% 画面高）。
+// 位置按默认机位 (3.0, 1.8, 1.8) → (-2.2, 1.0, -1.6) 的视锥调过，见 frontend/README。
+const partner = createPartner({ height: 1.15 });
+// 应用 Studio 精调坐姿与位置
+partner.group.position.set(-2.024, 0.25, -1.45);
+partner.group.rotation.set(0, 1.571, 0);
+room.add(partner.group);
+
+
 // ---- 挂历正面：当日步数卡面（XQ-006） ----
 // 日历是「当日健康概览」的物件位（UC-04），文字只能走贴图 —— 相机一动 HTML 覆盖层就穿帮。
 const calendarFace = createCalendarFace();
@@ -74,12 +84,25 @@ const calendarGroup = room.getObjectByName(NAME.calendar);
 if (calendarGroup) calendarGroup.add(calendarFace.mesh);
 
 // ---- HUD ----
+const initialState = params.get('state') || 'upright';
 const hud = createHud({
   onTool: handleTool,
-  initialState: params.get('state') || 'upright',
+  initialState,
   showToolbar: params.get('hud') !== '0',
 });
-hud.setState(params.get('state') || 'upright');
+hud.setState(initialState);
+partner.setState(initialState);
+
+// 演示用：数字键 1–6 直接切伙伴状态（1 坐直 2 驼背 3 伏案 4 离开 5 喝水 6 检测中）。
+// 只改姿态与状态卡，不碰镜头；HUD 工具条是业务入口，这里是录屏/答辩的快捷方式。
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const idx = Number(e.key) - 1;
+  if (!Number.isInteger(idx) || idx < 0 || idx >= PARTNER_STATES.length) return;
+  const next = PARTNER_STATES[idx];
+  partner.setState(next);
+  hud.setState(next);
+});
 
 // ============================================================
 // XQ-006 数据链：WS /ws → 伙伴状态 / 今日步数
@@ -180,14 +203,14 @@ window.addEventListener('pagehide', () => live?.close());
  * 功能入口本身仍是「点物件」（界面原型原则二）。各机位按 room.js 布局估算。
  */
 const VIEWS = {
-  default:  { pos: [3.0, 1.8, 1.8],   tgt: [-2.2, 1.0, -1.6] },   // 房间总览（XQ-003 定稿机位）
-  desk:     { pos: [1.9, 1.45, 0.1],  tgt: [-1.8, 0.95, -2.5] },  // 桌面近景
-  chair:    { pos: [1.1, 1.25, 0.8],  tgt: [-1.65, 0.6, -2.35] }, // 椅位视角
-  monitor:  { pos: [1.35, 1.5, 0.35], tgt: [-1.65, 1.12, -2.68] },// 显示器（屏面朝 +z）
-  mirror:   { pos: [0.3, 1.5, 0.3],   tgt: [-2.85, 1.42, -0.55] },// 椭圆镜
-  calendar: { pos: [0.3, 1.95, -0.75],tgt: [-2.85, 1.92, -1.85] },// 挂历
-  mug:      { pos: [0.7, 1.35, 0.1],  tgt: [-2.66, 0.78, -1.5] }, // 水杯（矮柜上）
-  camera:   { pos: [1.15, 1.62, 0.15],tgt: [-1.65, 1.32, -2.7] }, // 小相机（显示器顶）
+  default:  { pos: [3.0, 1.8, 1.8],   tgt: [-1.8, 0.95, -1.45] },   // 房间总览
+  desk:     { pos: [0.6, 1.45, -0.6], tgt: [-1.5, 0.85, -1.45] }, // 桌面近景
+  chair:    { pos: [0.1, 1.35, -0.5], tgt: [-2.06, 0.8, -1.45] }, // 椅位小怪兽特写
+  monitor:  { pos: [-0.3, 1.25, -1.45], tgt: [-1.30, 1.12, -1.45] }, // 显示器（屏面朝 -x）
+  mirror:   { pos: [0.3, 1.5, 0.3],   tgt: [-2.85, 1.42, -0.55] }, // 椭圆镜
+  calendar: { pos: [0.3, 1.95, -0.75],tgt: [-2.85, 1.92, -1.85] }, // 挂历
+  mug:      { pos: [-0.8, 1.35, -1.2], tgt: [-2.45, 0.78, -2.55] }, // 水杯（矮柜上）
+  camera:   { pos: [-0.4, 1.55, -1.45], tgt: [-1.30, 1.32, -1.45] }, // 小相机（显示器顶）
 };
 const VIEW_CYCLE = ['default', 'desk', 'chair']; // 「视角方式」循环序
 let viewIdx = 0;
@@ -267,7 +290,12 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---- 渲染循环 ----
-renderer.setAnimationLoop(() => {
+// r186 起 THREE.Clock 已标记废弃，改用 THREE.Timer（同样是「上一帧到这一帧」的秒数）
+const timer = new THREE.Timer();
+renderer.setAnimationLoop((timestamp) => {
+  timer.update(timestamp);
+  const dt = Math.min(timer.getDelta(), 0.1); // 切标签页回来时 dt 会很大，钳一下防止姿态瞬间跳到位
+  partner.update(dt);
   viewer.update();
   hud.tick();
   renderer.render(scene, viewer.camera);
@@ -277,5 +305,81 @@ renderer.setAnimationLoop(() => {
 // （F12 → __xiaoqi.scene.getObjectByName('room')）
 // 只在开发期挂载 —— 生产构建带上它等于把内部对象对外暴露。
 if (import.meta.env.DEV) {
-  window.__xiaoqi = { THREE, scene, renderer, viewer, hud, live, phone: () => phone, calendarFace };
+  window.__xiaoqi = { THREE, scene, renderer, viewer, hud, partner };
 }
+
+
+// ---- 挂载小栖 3D 资产与场景工作室 (Studio) ----
+// 默认开启，支持多物件变换、缩放、旋转、动作测试与一键导出
+setupStudio({
+  scene,
+  viewer,
+  partner,
+  room,
+  onSave: (config) => {
+    console.log('[Studio] 保存最新场景配置:', config);
+  }
+});
+
+
+// ============================================================
+// 后端 WebSocket 实时姿态驱动（XQ-004 闭环链路）
+// ============================================================
+const wsUrl = params.get('ws') || 'ws://127.0.0.1:8000/ws';
+let ws = null;
+let reconnectTimer = null;
+
+function connectWs() {
+  try {
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log(`[xiaoqi:ws] 已连接后端姿态链路: ${wsUrl}`);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        // 兼容全量快照 (hello) 与实时事件 (state)
+        let poseState = null;
+        if (msg.type === 'state' && msg.pose?.state) {
+          poseState = msg.pose.state;
+        } else if (msg.type === 'hello' && msg.pose?.state) {
+          poseState = msg.pose.state;
+        } else if (msg.pose_state) {
+          poseState = msg.pose_state;
+        }
+
+        if (poseState) {
+          console.log(`[xiaoqi:ws] 收到姿态变更: ${poseState}`);
+          partner.setState(poseState);
+          hud.setState(poseState);
+        }
+      } catch (err) {
+        console.warn('[xiaoqi:ws] 解析消息失败:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      // 断流兜底：角色保持当前姿态，不弹窗、不报错，静默尝试重连
+      scheduleReconnect();
+    };
+
+    ws.onerror = () => {
+      // 静默处理，避免打断界面
+    };
+  } catch (e) {
+    scheduleReconnect();
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectWs();
+  }, 3000);
+}
+
+// 启动 WebSocket 监听
+connectWs();

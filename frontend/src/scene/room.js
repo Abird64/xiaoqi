@@ -130,40 +130,37 @@ function buildWindow() {
 function buildDesk() {
   const group = new THREE.Group();
   group.name = NAME.desk;
+  group.position.set(0, -0.166, -0.031);
+  group.rotation.set(0, 0, 0);
   const woodMat = clay(PALETTE.wood);
 
-  // 长边：沿 x 延伸、贴着窗墙
-  const longTop = roundedBox(DESK_L, 0.05, DESK_D, 0.02, woodMat);
-  longTop.name = 'desk-top-long';
-  longTop.position.set(WALL + DESK_L / 2, DESK_H, WALL + DESK_D / 2);
-  longTop.castShadow = true;
-  longTop.receiveShadow = true;
-  group.add(longTop);
+  // 长边桌面：沿 z 延伸、平行于左侧实体墙 x=-3
+  // 桌面长 2.1m (沿 z)，宽 0.7m (沿 x)，中心 x = -1.50, z = -1.45
+  const top = roundedBox(DESK_D, 0.05, DESK_L, 0.02, woodMat);
+  top.name = 'desk-top-long';
+  top.position.set(-1.50, DESK_H, -1.45);
+  top.castShadow = true;
+  top.receiveShadow = true;
+  group.add(top);
 
-  const legR = roundedBox(0.06, DESK_H - 0.05, DESK_D - 0.08, 0.02, woodMat);
-  legR.name = 'desk-leg-long';
-  legR.position.set(WALL + DESK_L - 0.05, (DESK_H - 0.05) / 2, WALL + DESK_D / 2);
-  legR.castShadow = true;
-  group.add(legR);
+  // 桌腿：靠近落地窗侧 (z = -2.45)
+  const legNorth = roundedBox(DESK_D - 0.08, DESK_H - 0.05, 0.06, 0.02, woodMat);
+  legNorth.name = 'desk-leg-north';
+  legNorth.position.set(-1.50, (DESK_H - 0.05) / 2, -2.45);
+  legNorth.castShadow = true;
+  group.add(legNorth);
 
-  // 短边：沿 z 回靠实体墙 x=-3
-  const SHORT_L = 1.1;
-  const shortTop = roundedBox(DESK_D, 0.05, SHORT_L, 0.02, woodMat);
-  shortTop.name = 'desk-top-short';
-  shortTop.position.set(WALL + DESK_D / 2, DESK_H, WALL + SHORT_L / 2);
-  shortTop.castShadow = true;
-  shortTop.receiveShadow = true;
-  group.add(shortTop);
+  // 桌腿：靠内侧 (z = -0.45)
+  const legSouth = roundedBox(DESK_D - 0.08, DESK_H - 0.05, 0.06, 0.02, woodMat);
+  legSouth.name = 'desk-leg-south';
+  legSouth.position.set(-1.50, (DESK_H - 0.05) / 2, -0.45);
+  legSouth.castShadow = true;
+  group.add(legSouth);
 
-  const legS = roundedBox(DESK_D - 0.08, DESK_H - 0.05, 0.06, 0.02, woodMat);
-  legS.name = 'desk-leg-short';
-  legS.position.set(WALL + DESK_D / 2, (DESK_H - 0.05) / 2, WALL + SHORT_L - 0.05);
-  legS.castShadow = true;
-  group.add(legS);
-
-  const brace = roundedBox(DESK_L - 0.2, 0.05, 0.04, 0.015, woodMat);
+  // 横撑（加固梁）
+  const brace = roundedBox(0.04, 0.05, DESK_L - 0.2, 0.015, woodMat);
   brace.name = 'desk-brace';
-  brace.position.set(WALL + DESK_L / 2, DESK_H - 0.16, WALL + 0.06);
+  brace.position.set(-1.50, DESK_H - 0.16, -1.45);
   group.add(brace);
 
   return group;
@@ -172,7 +169,8 @@ function buildDesk() {
 function buildDeskCabinet() {
   const group = new THREE.Group();
   group.name = NAME.deskCabinet;
-  group.position.set(WALL + DESK_D / 2, 0, WALL + 1.5);
+  group.position.set(-1.475, 0, 0.05);
+  group.rotation.set(3.142, -1.568, 3.142);
 
   const woodMat = clay(PALETTE.wood);
   const W = 0.6, H = CABINET_H, D = 0.6;
@@ -206,7 +204,8 @@ function buildDeskCabinet() {
 function buildChair() {
   const group = new THREE.Group();
   group.name = NAME.chair;
-  group.position.set(WALL + 1.35, 0, WALL + DESK_D + 0.62);
+  group.position.set(-2.18, 0, -1.45);
+  group.rotation.set(0, -1.571, 0);
 
   const seatMat = clay(PALETTE.chair);
   const metalMat = clay(0x7f8286, { roughness: 0.75 });
@@ -224,9 +223,6 @@ function buildChair() {
   backRest.castShadow = true;
   group.add(backRest);
 
-  // 腰靠分块：靠背中下部独立小面，朝坐者（+z）突出（XQ-017）
-  // 宽 0.32 < 靠背 0.44 两侧露边；后半（z 0.22~0.23）嵌进靠背防浮空，前半突出约 0.04；
-  // 与靠背同色同倾角（-0.12），粘土风靠形体+独立 shading 分块，不靠颜色对比
   const lumbar = roundedBox(0.32, 0.20, 0.05, 0.02, seatMat);
   lumbar.name = 'chair-lumbar';
   lumbar.position.set(0, 0.59, 0.245);
@@ -265,7 +261,9 @@ function buildChair() {
 function buildMonitor() {
   const group = new THREE.Group();
   group.name = NAME.monitor;
-  group.position.set(WALL + 1.35, DESK_H + 0.025, WALL + 0.3);
+  group.position.set(-1.3, 0.62, -1.45);
+  group.rotation.set(0, -1.571, 0);
+  group.scale.setScalar(1.2);
 
   const frameMat = clay(PALETTE.frameSilver, { roughness: 0.7, metalness: 0.35 });
 
@@ -319,7 +317,8 @@ function buildMonitor() {
 function buildKeyboard() {
   const group = new THREE.Group();
   group.name = NAME.keyboard;
-  group.position.set(WALL + 1.35, DESK_H + 0.032, WALL + 0.66);
+  group.position.set(-1.65, 0.649, -1.45);
+  group.rotation.set(0, -1.571, 0);
   const base = roundedBox(0.42, 0.02, 0.14, 0.008, clay(0x6f7378, { roughness: 0.75 }));
   base.name = 'keyboard-base';
   base.castShadow = true;
@@ -339,8 +338,8 @@ function buildKeyboard() {
 function buildMouse() {
   const mouse = roundedBox(0.06, 0.035, 0.1, 0.026, clay(0x6f7378, { roughness: 0.7 }));
   mouse.name = NAME.mouse;
-  mouse.position.set(WALL + 1.72, DESK_H + 0.043, WALL + 0.64);
-  mouse.rotation.y = -0.2;
+  mouse.position.set(-1.65, 0.636, -0.999);
+  mouse.rotation.set(0, -1.771, 0);
   mouse.castShadow = true;
   return mouse;
 }
@@ -362,7 +361,8 @@ function buildMouse() {
 function buildClock() {
   const group = new THREE.Group();
   group.name = NAME.clock;
-  group.position.set(WALL + 2.15, DESK_H + 0.025, WALL + 0.38);
+  group.position.set(-1.3, 0.61, -2.15);
+  group.rotation.set(0, 0.696, 0);
   // XQ-014：表盘朝向 65°→0°，法线 (0,0,1) 纯 +z，与显示器屏幕同向、正对椅子。
   // 65° 是 XQ-011 为消「默认机位饼读感」设的斜角；XQ-013 盘体竖正后结构已成立，
   // 组长要求朝向对齐场景逻辑（闹钟/显示器都面朝使用者），故归零同向。
@@ -492,7 +492,7 @@ function buildClock() {
 function buildPlant() {
   const group = new THREE.Group();
   group.name = NAME.plant;
-  group.position.set(WALL + 1.95, DESK_H + 0.025, WALL + 0.34);
+  group.position.set(-1.508, 0.611, 0.026);
 
   // 梯形盆 + 盆沿
   const potMat = clay(0xe8e6e0, { roughness: 0.85 });
@@ -562,7 +562,8 @@ function buildPlant() {
 function buildMug() {
   const group = new THREE.Group();
   group.name = NAME.mug;
-  group.position.set(WALL + DESK_D / 2, CABINET_H + 0.025, WALL + 1.5);
+  group.position.set(-1.5, 0.62, -0.651);
+  group.scale.setScalar(1.4);
 
   const whiteMat = clay(PALETTE.white, { roughness: 0.55 });
 
@@ -643,7 +644,7 @@ function buildMug() {
 function buildMirror() {
   const group = new THREE.Group();
   group.name = NAME.mirror;
-  group.position.set(WALL + 0.04, 1.42, -0.55);
+  group.position.set(-2.96, 1.42, -0.356);
   group.rotation.y = Math.PI / 2;
 
   const frame = new THREE.Mesh(
@@ -701,7 +702,7 @@ function buildMirror() {
 function buildCalendar() {
   const group = new THREE.Group();
   group.name = NAME.calendar;
-  group.position.set(WALL + 0.03, 1.92, -1.85);
+  group.position.set(-2.97, 1.92, -1.693);
   group.rotation.y = Math.PI / 2;
 
   // 描边卡片：比 paper 大一圈垫在正后方（XQ-018）
@@ -791,7 +792,7 @@ function buildLights() {
   ambient.name = 'light-ambient';
   group.add(ambient);
 
-  const lampPos = [-1.75, ROOM.wallHeight - 0.72, -2.2];
+  const lampPos = [-1.5, 2.053, -1.45];
   const lampGroup = new THREE.Group();
   lampGroup.name = NAME.lamp;
   lampGroup.position.set(...lampPos);
@@ -907,7 +908,8 @@ export function createRoom({ grid = true } = {}) {
   // 伙伴占位（XQ-004 建几何体）：坐在椅子上
   const partnerAnchor = new THREE.Object3D();
   partnerAnchor.name = NAME.partner;
-  partnerAnchor.position.set(WALL + 1.35, SEAT_H, WALL + DESK_D + 0.62);
+  partnerAnchor.position.set(-2.18, SEAT_H, -1.45);
+  partnerAnchor.rotation.y = -Math.PI / 2;
   room.add(partnerAnchor);
 
   return room;
