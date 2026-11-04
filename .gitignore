@@ -49,3 +49,6 @@ desktop.ini
 *.log
 tmp/
 .tmp/
+
+# ---- AI 助手的本地工作区（记忆 / 会话数据，不进仓库）----
+.workbuddy/
