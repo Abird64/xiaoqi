@@ -19,6 +19,8 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+# 运行时数据目录：内含 pair.json（配对令牌）与 sqlite 库，属机器本地状态
+backend/data/
 
 # ---- Node / 前端 ----
 node_modules/
