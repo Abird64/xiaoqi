@@ -42,13 +42,23 @@ except Exception as _e:  # ImportError 或平台不支持
 
 
 class PoseEstimator:
-    """一帧 BGR → 33 点关键点。失败时 ok=False，**绝不假装"无人"**。"""
+    """一帧 BGR → 33 点关键点。失败时 ok=False，**绝不假装"无人"**。
 
-    def __init__(self, cfg: Config | None = None) -> None:
+    running_mode：
+      "video"（默认）逐帧流式推理，**带帧间跟踪**，实时摄像头用这个；
+      "image" 每帧独立检测、**无状态**，单图/批量图必须用这个 ——
+              用 video 模式连跑多张不同照片时，会带着上一张的跟踪状态，
+              同一张图换个顺序跑出来的角度能差好几倍（实测 neck 7.8°↔47.8°）。
+    """
+
+    def __init__(self, cfg: Config | None = None, running_mode: str = "video") -> None:
         self.cfg = cfg or load_config()
         self.ok = False
         self.last_error: str | None = None
         self.infer_ms: float = 0.0          # 最近一次推理耗时（NFR-P-02 实测用）
+        self.running_mode = ("image" if str(running_mode).lower() == "image"
+                             else "video")
+        self._video = self.running_mode == "video"
         self._landmarker = None
         self._last_ts_ms = 0
 
@@ -76,7 +86,8 @@ class PoseEstimator:
                 # （本项目就在 G:\中级实训\… 下）会报 "Unable to open file"，
                 # 传 model_asset_buffer 可完全绕过这个限制；5.5 MB 常驻内存可接受。
                 base_options=BaseOptions(model_asset_buffer=path.read_bytes()),
-                running_mode=vision.RunningMode.VIDEO,   # 需要帧间跟踪
+                running_mode=(vision.RunningMode.VIDEO if self._video
+                              else vision.RunningMode.IMAGE),
                 num_poses=int(self.cfg.vision_num_poses),
                 min_pose_detection_confidence=float(
                     self.cfg.vision_min_detection_confidence),
@@ -102,12 +113,14 @@ class PoseEstimator:
             rgb = np.ascontiguousarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-            ts = int(time.monotonic() * 1000)          # VIDEO 模式必须严格递增
-            if ts <= self._last_ts_ms:
-                ts = self._last_ts_ms + 1
-            self._last_ts_ms = ts
-
-            res = self._landmarker.detect_for_video(mp_image, ts)
+            if self._video:
+                ts = int(time.monotonic() * 1000)      # VIDEO 模式必须严格递增
+                if ts <= self._last_ts_ms:
+                    ts = self._last_ts_ms + 1
+                self._last_ts_ms = ts
+                res = self._landmarker.detect_for_video(mp_image, ts)
+            else:
+                res = self._landmarker.detect(mp_image)   # IMAGE 模式无状态、可复现
             self.infer_ms = round((time.perf_counter() - t0) * 1000, 1)
 
             if not res.pose_landmarks:                 # 画面中没人

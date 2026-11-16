@@ -19,6 +19,7 @@ from .rules.posture_rules import PostureRules
 from .state.machine import PoseStateMachine
 from .store.db import Store
 from .vision.camera import CaptureThread, SimThread
+from .vision.spot_check import SpotCheckThread
 
 log = logging.getLogger("xiaoqi.main")
 
@@ -43,6 +44,20 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
         app.state.source = source
         log.info("数据源已启动：%s", "模拟(--sim)" if sim else "摄像头")
 
+        # ---- 坐姿抽检（2026-11-16：定期拍摄替代实时监测）----
+        spot = None
+        if getattr(cfg, "sitting_enabled", False):
+            spot = SpotCheckThread(cfg, store=store, hub=hub)
+            app.state.spot = spot
+            if spot.estimator.ok:
+                spot.start()
+                log.info("坐姿抽检已启动：每 %ss 一次，摄像头 #%s",
+                         spot.interval, spot.camera_index)
+            else:
+                log.error("坐姿抽检未启动（模型不可用）：%s", spot.last_error)
+        else:
+            log.info("坐姿抽检未启用（config.yaml 的 sitting.enabled=false）")
+
         async def heartbeat():
             while True:
                 await asyncio.sleep(10)
@@ -57,6 +72,9 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
             yield
         finally:
             hb.cancel()
+            if spot is not None:
+                spot.stop()
+                spot.join(timeout=3)
             source.stop()
             source.join(timeout=3)
             store.close()
@@ -125,10 +143,57 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
         rules.baseline_neck_deg = None
         return {"ok": True, "calibrated": False}
 
+    # ---------- 坐姿抽检（2026-11-16 新增，协议未定义 → 属「只增不改」的增）----------
+    @app.get("/api/sitting/latest")
+    async def sitting_latest():
+        """最近一次抽检的结果快照（只读，不触发新抽检）。"""
+        spot = getattr(app.state, "spot", None)
+        if spot is None:
+            return {"v": 1, "enabled": False, "model_ready": False,
+                    "camera_ready": False, "result": None,
+                    "last_error": "坐姿抽检未启用（config.yaml → sitting.enabled）"}
+        return {"v": 1, "enabled": True, **spot.snapshot()}
+
+    @app.get("/api/sitting/history")
+    async def sitting_history(
+        from_: int | None = Query(None, alias="from"),
+        to: int | None = Query(None, alias="to"),
+        limit: int = 200,
+    ):
+        """按 ts 升序返回历史抽检记录（人机课 M2 报告的数据来源）。"""
+        store: Store = app.state.store
+        t = to or now_ms()
+        f = from_ if from_ is not None else t - HISTORY_MAX_RANGE_MS
+        if t - f > HISTORY_MAX_RANGE_MS:
+            raise HTTPException(status_code=400, detail="RANGE_TOO_WIDE")
+        rows = store.query(f, t, "sitting", limit)
+        rows.reverse()                      # store 返回倒序，对外统一升序
+        return {"v": 1, "from": f, "to": t, "count": len(rows), "items": rows}
+
+    @app.post("/api/sitting/check")
+    async def sitting_check():
+        """手动触发一次抽检（调试/补拍用）。真正的结果稍后从 latest 取。"""
+        spot = getattr(app.state, "spot", None)
+        if spot is None:
+            raise HTTPException(status_code=409, detail="SITTING_DISABLED")
+        if not spot.estimator.ok:
+            raise HTTPException(status_code=503, detail="MODEL_UNAVAILABLE")
+        spot.trigger()
+        return {"ok": True, "interval_sec": spot.interval,
+                "message": "已触发一次抽检，约 1 秒后查 GET /api/sitting/latest"}
+
     @app.get("/api/health")
     async def health():
+        spot = getattr(app.state, "spot", None)
         return {"ok": True, "version": "0.1.0", "clients": hub.client_count,
-                "calibrated": calib.done, "sim": sim}
+                "calibrated": calib.done, "sim": sim,
+                "sitting": {
+                    "enabled": spot is not None,
+                    "model_ready": bool(spot and spot.estimator.ok),
+                    "rounds": spot.rounds if spot else 0,
+                    "interval_sec": spot.interval if spot else None,
+                    "last_error": spot.last_error if spot else None,
+                }}
 
     @app.get("/api/token")
     async def token():
@@ -165,6 +230,8 @@ def run(sim: bool = False, host: str | None = None, port: int | None = None,
 │  手机上报  POST /api/ingest/health           │
 │  配对令牌  {cfg.token:<38}│
 │  历史查询  GET  /api/history                 │
+│  坐姿抽检  GET  /api/sitting/latest          │
+│            周期 {getattr(cfg, 'sitting_interval_sec', 60):>3}s（{('启用' if getattr(cfg, 'sitting_enabled', False) else '关闭'):<4}）           │
 └──────────────────────────────────────────────┘"""
     print(banner)
     uvicorn.run(app, host=host or cfg.host, port=port or cfg.port,
