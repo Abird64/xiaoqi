@@ -245,7 +245,7 @@ renderer.setAnimationLoop((t) => { timer.update(t); partner.update(timer.getDelt
 | 分辨率减半 | 23 |
 | 隐藏全部家具 | 27 |
 
-⇒ **M3-6 的帧率判据必须在 Windows 真机 GPU 上跑**，不要用本环境的数字下结论。
+⇒ **M3-6 的帧率判据必须在真实演示机上跑**（组员 Windows 机 / 本机 Linux + 真实 GPU，Wayland 合成器会额外吃帧），不要用无 GPU 环境的数字下结论。
 
 另：`three@0.186` 已移除 `PCFSoftShadowMap`，`main.js` 里那行会在控制台留一条
 `THREE.WebGLShadowMap: PCFSoftShadowMap has been removed. Using PCFShadowMap instead.`

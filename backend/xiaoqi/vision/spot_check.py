@@ -8,9 +8,9 @@
   每 `sitting.interval_sec`（默认 60s）抓一帧摄像头画面 → Lightweight OpenPose
   推理 → 算指标 → 粗判 → 存库 + 推 WS + 更新 `latest`。
 
-摄像头「权限」在 Windows 上是系统级开关，程序侧能做的是**打开并分类报错**：
-  设备不存在 / 被其它程序占用 / 隐私设置禁止 / 直接打不开，分别给不同提示，
-  且失败后不退出线程，下一轮继续重试（M1-6 精神：不崩）。
+摄像头「权限」在 Windows 是系统级开关、在 Linux 是设备节点 + `video` 组 + 占用者三件事，
+  程序侧能做的是**打开并分类报错**：设备不存在 / 被占用 / 权限不足分别给不同提示，
+  且失败后不退出线程，下一轮继续重试（M1-6 精神：不崩）。平台差异全部收敛在 `camera_util`。
 
 线程安全：`latest` / `last_error` 由本线程写、接口线程读，读的是不可变 dict 引用，
           CPython 下赋值是原子的，足够用；不做锁以免拖慢抽检。
@@ -23,6 +23,7 @@ import time
 
 from ..hub import now_ms
 from ..rules import sitting_rules
+from . import camera_util
 from .pose_lw import LWPoseEstimator
 
 log = logging.getLogger("xiaoqi.spot")
@@ -71,27 +72,10 @@ class SpotCheckThread(threading.Thread):
 
     # ------------------------------------------------------------------ 摄像头
     def _open_camera(self):
-        """打开摄像头；失败返回 (None, 可读原因)。"""
-        import cv2
-
-        for backend, tag in ((cv2.CAP_DSHOW, "DSHOW"), (cv2.CAP_ANY, "ANY")):
-            try:
-                cap = cv2.VideoCapture(self.camera_index, backend)
-            except Exception as e:                       # 极少见，兜底
-                log.warning("摄像头打开异常（%s）：%s", tag, e)
-                continue
-            if cap.isOpened():
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cfg.camera_width)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cfg.camera_height)
-                log.info("抽检摄像头已打开 #%s（%s）", self.camera_index, tag)
-                return cap, None
-            cap.release()
-
-        return None, (
-            f"摄像头 #{self.camera_index} 打不开。常见原因：\n"
-            "    1) 设备未连接或被禁用（设备管理器里看不到）；\n"
-            "    2) 已被其它程序占用（相机 App / 会议软件 / 其它调试进程）；\n"
-            "    3) Windows 设置 → 隐私 → 相机，未允许桌面应用访问。")
+        """打开摄像头；失败返回 (None, 可读原因)。后端选择统一在 `camera_util`。"""
+        cap, tag, err = camera_util.open_capture(
+            self.camera_index, self.cfg.camera_width, self.cfg.camera_height)
+        return (None, err) if cap is None else (cap, None)
 
     def _grab_frame(self):
         """抓一帧。前几帧丢弃，等自动曝光稳定。"""
