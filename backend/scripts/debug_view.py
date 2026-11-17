@@ -38,7 +38,9 @@ def main() -> int:
     ap.add_argument("--headless", action="store_true", help="不弹窗口，只打印数值")
     ap.add_argument("--seconds", type=int, default=0, help="运行 N 秒后自动退出（0=一直跑）")
     ap.add_argument("--calibrate", action="store_true",
-                    help="启动即用前 3 秒采样基线（否则先按直立粗估）")
+                    help="启动即采样「坐直」基线（采满 30 帧为止，默认最长等 15 秒）")
+    ap.add_argument("--calib-timeout", type=float, default=15.0,
+                    help="校准采样超时秒数，超时改用粗基线 12.0°")
     args = ap.parse_args()
 
     try:
@@ -77,17 +79,26 @@ def main() -> int:
                 return 1
             obs = est.infer(frame)
 
-            # ---- 校准（M2-1）：前 3 秒采样「坐直」基线 ----
+            # ---- 校准（M2-1）：采满 required_samples 帧为止 ----
+            # 早期写死"前 3 秒"，但循环里每帧还有 sleep + 推理耗时（实际 ~8-9 Hz），
+            # 3 秒只够采 ~25 个样本 < 30 → 静默失败，状态永远 unknown。
             if not calib.done:
-                if args.calibrate and time.monotonic() - t0 < 3.0:
-                    done = calib.feed(obs)
-                    if done:
-                        rules.baseline_neck_deg = calib.baseline_neck_deg
-                        print(f"✅ 校准完成：基线 {calib.baseline_neck_deg}°"
-                              f"（{len(calib.samples)} 个样本）")
+                if args.calibrate:
+                    elapsed = time.monotonic() - t0
+                    if elapsed < args.calib_timeout:
+                        if calib.feed(obs):
+                            rules.baseline_neck_deg = calib.baseline_neck_deg
+                            print(f"✅ 校准完成：基线 {calib.baseline_neck_deg}°"
+                                  f"（{len(calib.samples)} 个样本，{elapsed:.1f}s）")
+                        else:
+                            print(f"  采样中… {calib.progress:.0%}  保持坐直不动作")
                     else:
-                        print(f"  采样中… {calib.progress:.0%}  保持坐直")
-                elif time.monotonic() - t0 >= 3.0 and not args.calibrate:
+                        rules.baseline_neck_deg = 12.0
+                        calib.baseline_neck_deg = 12.0
+                        print(f"⚠️ 校准超时（{args.calib_timeout:.0f}s 内只采到 "
+                              f"{len(calib.samples)}/{calib.required_samples} 个样本），"
+                              f"改用粗基线 12.0°")
+                elif time.monotonic() - t0 >= 3.0:
                     rules.baseline_neck_deg = calib.baseline_neck_deg or 12.0
             state, conf, metrics = rules.classify(obs)
             ev = machine.feed(state, conf, metrics)

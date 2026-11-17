@@ -42,6 +42,22 @@ phone:
   dedup_window_sec: 60       # 幂等窗口
   stale_sec: 900             # 超过 15 分钟未更新 → stale=true
 
+# 坐姿抽检（2026-11-16：定期拍摄替代实时监测，模型换 Lightweight OpenPose）
+# 相关接口：GET /api/sitting/latest · GET /api/sitting/history · POST /api/sitting/check
+sitting:
+  enabled: true              # ⚠️ 开启后**停用实时链路**（同一摄像头不能双开）；模型未就绪时自动退回实时链路
+  interval_sec: 60           # 抽检周期（秒）。方案定的是 1 分钟
+  camera_index: 0            # 抽检用的摄像头编号
+  lw_repo: ../../lightweight-human-pose-estimation.pytorch   # 相对 backend/
+  lw_checkpoint: checkpoints/checkpoint_iter_370000.pth      # 相对 lw_repo
+  height_size: 256           # 网络输入高度；抽检不追帧率，可用 320/384 换精度
+  torch_threads: 1           # ⚠️ 实测多线程反而更慢（depthwise conv + 宿主争抢），保持 1
+  # 粗判阈值（绝对角度，M2 实测后改成相对个人基线的增量）
+  head_pitch_deg: 58.0       # 头相对 neck 与竖直夹角 ≥ 此值 → slouch
+  torso_lean_deg: 20.0       # 躯干前倾 ≥ 此值 → desk_hunch
+  min_visible_kpts: 4        # 少于这么多关键点 → unknown（不硬判）
+  margin_ratio: 0.03         # 头部关键点贴边（人出画）→ unknown
+
 storage:
   path: data/xiaoqi.db       # SQLite（相对 backend/）
 

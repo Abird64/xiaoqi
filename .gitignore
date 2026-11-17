@@ -39,6 +39,16 @@ pnpm-debug.log*
 *.blend1
 *.glb.bak
 
+# ---- 姿态模型 ----
+# Lightweight OpenPose 权重（88MB）超过 GitHub 单文件安全余量，且 torch 依赖另有
+# 200MB+，一律本地准备、不入库 → 见 backend/models/README.md
+# 注意：MediaPipe 的 pose_landmarker_lite.task（5.5MB）已入库、旧链路仍在用，
+#      **不要**把 *.task 加进忽略列表。
+backend/models/*.pth
+backend/models/*.onnx
+# 若有人把 LW 仓库 clone 到项目里，也别提交
+lightweight-human-pose-estimation.pytorch/
+
 # ---- 编辑器 / 系统 ----
 .vscode/
 .idea/

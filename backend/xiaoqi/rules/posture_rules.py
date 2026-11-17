@@ -42,7 +42,14 @@ def _angle_deg(u, v) -> float:
 
 
 def compute_metrics(landmarks: list) -> dict:
-    """算出协议里的客观指标：neck_angle_deg / shoulder_tilt_deg / distance_cm。"""
+    """算出客观指标。
+
+    三个角度各有含义，别混用（接口协议 §3.2：metrics 仅供调试/可视化）：
+      neck_angle_deg  头相对**躯干轴**的前屈 —— 正面/侧面都能用，但驼背时躯干也弯，会低估
+      head_pitch_deg  头相对**竖直方向**的绝对前倾 —— 侧面视角最直观，和"看起来驼不驼"最接近
+      shoulder_tilt_deg 肩线歪斜 —— **只在正面/斜前可用**；侧面两肩重叠时数学上无解，返回 None
+    view 标明当前视角，view=="side" 时 shoulder_tilt_deg 一定是 None。
+    """
     ear = _mid(landmarks[LEFT_EAR], landmarks[RIGHT_EAR])
     shoulder = _mid(landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER])
     hip = _mid(landmarks[LEFT_HIP], landmarks[RIGHT_HIP])
@@ -51,16 +58,33 @@ def compute_metrics(landmarks: list) -> dict:
     neck = (ear[0] - shoulder[0], ear[1] - shoulder[1], ear[2] - shoulder[2])
     neck_angle = _angle_deg(up, neck)                     # 头相对躯干的前倾角
 
+    # 头相对竖直方向：只取图像平面内的 x/y，避开 MediaPipe 深度 z 的噪声
+    head_pitch = _angle_deg((0.0, -1.0, 0.0), (neck[0], neck[1], 0.0))
+
     ls, rs = landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER]
-    shoulder_tilt = abs(math.degrees(math.atan2(rs[1] - ls[1], rs[0] - ls[0])))
+    dx, dy = rs[0] - ls[0], rs[1] - ls[1]
+    torso_len = math.hypot(shoulder[0] - hip[0], shoulder[1] - hip[1])
+
+    # 两肩在图像上的跨度 / 躯干长度：太窄说明人基本侧对镜头，
+    # 此时 atan2(dy, dx) 的 dx→0，肩线角必然飙到 60°~130°，指标失去意义。
+    span = math.hypot(dx, dy)
+    ratio = (span / torso_len) if torso_len > 1e-6 else 0.0
+    if ratio < 0.35:
+        shoulder_tilt = None
+        view = "side"
+    else:
+        ang = abs(math.degrees(math.atan2(dy, dx)))
+        shoulder_tilt = round(min(ang, 180.0 - ang), 1)   # 折回 0~90°，别让左右方向翻出 180°
+        view = "frontal"
 
     # 近似距离：躯干像素长度 → cm（标定常数，实测再调）
-    torso_px = math.hypot(shoulder[0] - hip[0], shoulder[1] - hip[1])
-    distance_cm = round(torso_px * 140.0, 1) if torso_px > 0 else 0.0
+    distance_cm = round(torso_len * 140.0, 1) if torso_len > 0 else 0.0
 
     return {
         "neck_angle_deg": round(neck_angle, 1),
-        "shoulder_tilt_deg": round(shoulder_tilt, 1),
+        "head_pitch_deg": round(head_pitch, 1),
+        "shoulder_tilt_deg": shoulder_tilt,
+        "view": view,
         "distance_cm": distance_cm,
     }
 

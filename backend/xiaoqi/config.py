@@ -37,6 +37,20 @@ class Config:
     token: str = ""
     dedup_window_sec: int = 60
     stale_sec: int = 900
+    # ---- 坐姿抽检（2026-11-16：定期拍摄替代实时监测；模型换 Lightweight OpenPose）----
+    # 默认关闭：抽检会**独占摄像头并停掉实时链**，干净的 clone 里没有模型权重，
+    # 默认开启只会让每次启动都刷一条 ERROR。开发机在 config.yaml 里显式开。
+    sitting_enabled: bool = False
+    sitting_interval_sec: int = 60
+    sitting_camera_index: int = 0
+    sitting_lw_repo: str = ""          # 空 = 不启用（模型不可用时抽检线程直接不跑）
+    sitting_lw_checkpoint: str = "checkpoints/checkpoint_iter_370000.pth"
+    sitting_height_size: int = 256
+    sitting_torch_threads: int = 1     # 实测多线程反而更慢（depthwise conv + 宿主争抢）
+    sitting_head_pitch_deg: float = 58.0    # 绝对阈值粗判，M2 换成相对基线
+    sitting_torso_lean_deg: float = 20.0
+    sitting_min_visible_kpts: int = 4
+    sitting_margin_ratio: float = 0.03      # 距画面边缘小于此比例视为人出画
     db_path: Path = BACKEND_DIR / "data" / "xiaoqi.db"
     frontend_dist: Path | None = None
 
@@ -83,7 +97,11 @@ def load_config(path: str | Path | None = None) -> Config:
 
     c.debounce_default = float(_dig(raw, "debounce", "default_sec", default=c.debounce_default))
     db_raw = _dig(raw, "debounce", default={}) or {}
-    c.debounce = {k: float(v) for k, v in db_raw.items() if k != "default_sec"}
+    # config.yaml 里的键写成 unknown_sec / away_sec / upright_sec，
+    # 而 debounce_for() 用裸状态名（'away'）查表 —— 必须剥掉 _sec 后缀，
+    # 否则三档防抖配置全部查不到，一律退回 default_sec（M2-2 也就形同虚设）。
+    c.debounce = {k.removesuffix("_sec"): float(v)
+                  for k, v in db_raw.items() if k != "default_sec"}
 
     c.refresh_sec = float(_dig(raw, "refresh_sec", default=c.refresh_sec))
     c.water_sec = int(_dig(raw, "reminder", "water_sec", default=c.water_sec))
@@ -93,6 +111,35 @@ def load_config(path: str | Path | None = None) -> Config:
 
     token = _dig(raw, "phone", "token", default="") or ""
     c.token = token or secrets.token_urlsafe(16)
+
+    # ---- 坐姿抽检（2026-11-16）----
+    c.sitting_enabled = bool(_dig(raw, "sitting", "enabled", default=c.sitting_enabled))
+    c.sitting_interval_sec = int(_dig(raw, "sitting", "interval_sec",
+                                      default=c.sitting_interval_sec))
+    c.sitting_camera_index = int(_dig(raw, "sitting", "camera_index",
+                                      default=c.camera_index))
+    c.sitting_height_size = int(_dig(raw, "sitting", "height_size",
+                                     default=c.sitting_height_size))
+    c.sitting_torch_threads = int(_dig(raw, "sitting", "torch_threads",
+                                       default=c.sitting_torch_threads))
+    c.sitting_head_pitch_deg = float(_dig(raw, "sitting", "head_pitch_deg",
+                                          default=c.sitting_head_pitch_deg))
+    c.sitting_torso_lean_deg = float(_dig(raw, "sitting", "torso_lean_deg",
+                                          default=c.sitting_torso_lean_deg))
+    c.sitting_min_visible_kpts = int(_dig(raw, "sitting", "min_visible_kpts",
+                                          default=c.sitting_min_visible_kpts))
+    c.sitting_margin_ratio = float(_dig(raw, "sitting", "margin_ratio",
+                                        default=c.sitting_margin_ratio))
+
+    repo = _dig(raw, "sitting", "lw_repo", default="") or ""
+    if repo:
+        p = Path(repo).expanduser()
+        if not p.is_absolute():
+            # 相对 backend/ 解析，和 storage.path / frontend.dist 保持同一口径
+            p = (BACKEND_DIR / p).resolve()
+        c.sitting_lw_repo = str(p)
+    c.sitting_lw_checkpoint = str(_dig(raw, "sitting", "lw_checkpoint",
+                                       default=c.sitting_lw_checkpoint))
 
     dbp = _dig(raw, "storage", "path", default=None)
     c.db_path = (BACKEND_DIR / dbp) if dbp else c.db_path

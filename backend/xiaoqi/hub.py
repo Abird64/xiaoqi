@@ -79,7 +79,15 @@ class Hub:
             self._clients.discard(ws)
 
     def _merge_snapshot(self, event: dict) -> None:
-        """hello 要全量快照 → 持续合并 pose / behavior / phone / reminder 摘要。"""
+        """hello 要全量快照 → 持续合并 pose / behavior / phone / reminder / sitting。
+
+        `sitting` 事件虽然带 `pose` 块（复用 events 表的 state/confidence/metrics
+        列），但那是**抽检**的绝对阈值判定，绕过状态机的防抖/滞回，绝不能并进
+        快照的 `pose` —— 否则一张快照帧就能改写前端"当前状态"。
+        """
+        if event.get("type") == "sitting":
+            self._snapshot["sitting"] = event.get("sitting") or {}
+            return
         for key in ("pose", "behavior", "phone", "reminder"):
             if key in event:
                 self._snapshot[key] = event[key]
