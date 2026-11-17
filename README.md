@@ -47,6 +47,7 @@
 ### 姿态判定逻辑（初步）
 
 - **采样**：不做实时推理。抽检线程每 60 秒抓一帧摄像头画面，用 Lightweight OpenPose（CPU，单帧 3–6 s）出 18 个关键点。
+- **采样**：不做实时推理。抽检线程每 60 秒抓一帧摄像头画面，用 Lightweight OpenPose（CPU，单帧 0.1–0.3 s，见 D-014 性能记录）出 18 个关键点。
 - **指标**：以头前倾角（颈→耳与竖直夹角）、躯干前倾角等客观几何量判定状态；关键点缺哪个就少算哪个，不硬凑骨架。
 - **判定**：超过阈值（默认头前倾 ≥ 58° → 驼背；躯干前倾 ≥ 20° → 伏案）即判为对应状态，健康伙伴相应表现。
 - **与 `pose_state` 六枚举的关系**：抽检复用同一套枚举词汇，实际产出 `unknown` / `upright` / `slouch` / `desk_hunch` / `away` 五个（`drinking` 不在抽检判定内），走**独立通路** `type:"sitting"`，**不进状态机**——没有防抖 / 滞回 / 持续时长统计，也不与实时状态合并统计。真机模式下没有输入驱动状态机，`type:"state"` 只由 `--sim` 的模拟通路产生，供前端开发。
@@ -82,6 +83,7 @@
 | 层 | 选型 |
 |---|---|
 | 感知（姿态） | Lightweight OpenPose（CPU，单帧 3–6s，60s 周期抽检） |
+| 感知（姿态） | Lightweight OpenPose（CPU，640×480 单帧 114 ms / height 384 时 273 ms，60s 周期抽检） |
 | 感知（行为） | pywin32 / psutil（Windows 前台应用）；Linux 用 X11 `XGetInputFocus` / `xdotool`（Wayland 需 `xdg-desktop-portal`，未落地，见 D-015） |
 | 感知（手机） | 系统健康库 + 系统现成工具，**零客户端开发**：电脑端暴露带配对令牌的 `POST /api/ingest/health`，手机侧用 iOS 快捷指令 / Android HTTP Shortcuts 读步数并上报；「静止时长」由步数序列差分推断，不额外申请权限 |
 | 后端 | Python + FastAPI + WebSocket |

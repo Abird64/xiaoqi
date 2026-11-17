@@ -169,7 +169,7 @@ class LWPoseEstimator:
 
         单帧异常返回空列表，不抛出（M1-6 精神）。
         """
-        if not self.ok or self._net is None:
+        if not self.ok or self._net is None or frame_bgr is None:
             return []
         try:
             import cv2

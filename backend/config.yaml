@@ -44,7 +44,7 @@ sitting:
   lw_repo: ../../lightweight-human-pose-estimation.pytorch   # 相对 backend/
   lw_checkpoint: checkpoints/checkpoint_iter_370000.pth      # 相对 lw_repo
   height_size: 256           # 网络输入高度；抽检不追帧率，可用 320/384 换精度
-  torch_threads: 1           # ⚠️ 实测多线程反而更慢（depthwise conv + 宿主争抢），保持 1
+  torch_threads: 1           # 本机实测 4 线程比 1 线程快 2.7 倍；组员机器核数未知，默认 1 最稳（D-014 2026-11-17 复测）
   # 粗判阈值（绝对角度，M2 实测后改成相对个人基线的增量）
   head_pitch_deg: 58.0       # 头相对 neck 与竖直夹角 ≥ 此值 → slouch
   torso_lean_deg: 20.0       # 躯干前倾 ≥ 此值 → desk_hunch
