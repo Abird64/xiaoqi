@@ -1,4 +1,3 @@
-from .camera import CaptureThread, SimThread
-from .pose_estimator import PoseEstimator
+from .camera import SimThread
 
-__all__ = ["CaptureThread", "SimThread", "PoseEstimator"]
+__all__ = ["SimThread"]

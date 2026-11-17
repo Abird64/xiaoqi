@@ -9,13 +9,6 @@ camera:
   index: 0               # USB 摄像头编号
   width: 640
   height: 480
-  fps: 30
-
-vision:                  # MediaPipe Tasks API（D-010：1.x 已移除 mp.solutions）
-  model_path: models/pose_landmarker_lite.task   # 相对 backend/；换成 pose_landmarker_full.task 可提升精度
-  num_poses: 1           # 只跟踪一个人
-  min_detection_confidence: 0.5
-  min_tracking_confidence: 0.5
 
 posture:
   # 判定阈值：相对校准基准的**增量**（个性化，由 calibration 采样定基线）
@@ -42,10 +35,10 @@ phone:
   dedup_window_sec: 60       # 幂等窗口
   stale_sec: 900             # 超过 15 分钟未更新 → stale=true
 
-# 坐姿抽检（2026-11-16：定期拍摄替代实时监测，模型换 Lightweight OpenPose）
+# 坐姿抽检（D-016：唯一姿态源 —— 没有 torch / 权重时后端就没有姿态数据）
 # 相关接口：GET /api/sitting/latest · GET /api/sitting/history · POST /api/sitting/check
 sitting:
-  enabled: true              # ⚠️ 开启后**停用实时链路**（同一摄像头不能双开）；模型未就绪时自动退回实时链路
+  enabled: true              # D-016 后不再有 MediaPipe 实时链可退；权重未就绪时 /api/health 报 pose_source=null
   interval_sec: 60           # 抽检周期（秒）。方案定的是 1 分钟
   camera_index: 0            # 抽检用的摄像头编号
   lw_repo: ../../lightweight-human-pose-estimation.pytorch   # 相对 backend/
