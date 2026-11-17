@@ -45,7 +45,7 @@ phone:
 # 坐姿抽检（2026-11-16：定期拍摄替代实时监测，模型换 Lightweight OpenPose）
 # 相关接口：GET /api/sitting/latest · GET /api/sitting/history · POST /api/sitting/check
 sitting:
-  enabled: true
+  enabled: true              # ⚠️ 开启后**停用实时链路**（同一摄像头不能双开）；模型未就绪时自动退回实时链路
   interval_sec: 60           # 抽检周期（秒）。方案定的是 1 分钟
   camera_index: 0            # 抽检用的摄像头编号
   lw_repo: ../../lightweight-human-pose-estimation.pytorch   # 相对 backend/

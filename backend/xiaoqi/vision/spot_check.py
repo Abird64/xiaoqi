@@ -48,6 +48,8 @@ class SpotCheckThread(threading.Thread):
         self._wake = threading.Event()
         self._cap = None
         self._next_ts: int | None = None
+        # 连续"画面里没有人"的轮数：单轮记 unknown，连续两轮才算真的离开
+        self._no_person_rounds = 0
 
         self.estimator = LWPoseEstimator(
             repo_dir=getattr(cfg, "sitting_lw_repo", ""),
@@ -135,10 +137,18 @@ class SpotCheckThread(threading.Thread):
         result["people"] = len(people)
 
         if not people:
-            result.update(state="away", confidence=0.0, reason="no_person",
-                          ok=True)
+            # 一张 60 秒的抽检帧没检出人，多半是构图/逆光/只露半身，不能直接写
+            # "人离开了"（会污染 away 时长统计）。连续两轮才记 away。
+            self._no_person_rounds += 1
+            away = self._no_person_rounds >= 2
+            result.update(state="away" if away else "unknown", confidence=0.0,
+                          reason="no_person_away" if away else "no_person",
+                          reason_text=sitting_rules.reason_text(
+                              "no_person_away" if away else "no_person"),
+                          ok=True, no_person_rounds=self._no_person_rounds)
             return result
 
+        self._no_person_rounds = 0
         # 取组内得分最高的人
         pts = people[0]["pts"]
         metrics = sitting_rules.compute_metrics(
@@ -186,33 +196,32 @@ class SpotCheckThread(threading.Thread):
         log.info("坐姿抽检已停止")
 
     def _publish(self, result: dict) -> None:
-        """存库 + 推送。落库失败不影响接口返回。"""
+        """推一条 `type:"sitting"` 事件；落库由 Hub 统一完成（单次写入）。
+
+        以前既手工 `store.write_event` 又 `hub.publish_threadsafe`，等于一次抽检
+        落两行，其中一行是伪装成 `state` 的伪样本，会混进 `/api/history` 的
+        实时统计。现在只发一条、只落一次库，`kind="sitting"` 独立存在。
+        """
         state = result.get("state")
         log.info("抽检 #%s：%s（%s）", self.rounds, state, result.get("reason"))
-        if self.store is not None:
-            try:
-                self.store.write_event({
-                    "v": 1, "type": "sitting", "ts": result["ts"],
-                    # 复用 events 表的 state/confidence/metrics 列，方便查询
-                    "pose": {"state": state,
-                             "confidence": result.get("confidence"),
-                             "metrics": result.get("metrics") or {}},
-                    "sitting": result,
-                })
-            except Exception:
-                log.exception("坐姿抽检落库失败")
+        event = {
+            "v": 1, "type": "sitting", "ts": result["ts"],
+            # 复用 events 表的 state/confidence/metrics 列，便于 SQL 直接查
+            "pose": {"state": state,
+                     "confidence": result.get("confidence"),
+                     "metrics": result.get("metrics") or {}},
+            "sitting": result,
+        }
         if self.hub is not None:
             try:
-                self.hub.publish_threadsafe({
-                    "v": 1, "type": "state", "ts": result["ts"],
-                    "pose": {"state": state,
-                             "confidence": result.get("confidence"),
-                             "since_ts": result["ts"],
-                             "sustained_sec": 0.0,
-                             "metrics": result.get("metrics") or {}},
-                })
+                self.hub.publish_threadsafe(event)   # 落库 + 广播一次
             except Exception:
                 log.debug("抽检推送失败", exc_info=True)
+        elif self.store is not None:                 # 无 Hub 时（脚本/测试）直接落库
+            try:
+                self.store.write_event(event)
+            except Exception:
+                log.exception("坐姿抽检落库失败")
 
     def _drop_camera(self) -> None:
         if self._cap is not None:
@@ -227,7 +236,9 @@ class SpotCheckThread(threading.Thread):
         """给 /api/sitting/latest 用的快照（不触发新抽检）。"""
         return {
             "v": 1,
-            "ts": now_ms(),
+            # ts = 最近一次抽检的抓拍时刻（没有结果时为 None）；"现在"另给 server_ts
+            "ts": self.latest["ts"] if self.latest else None,
+            "server_ts": now_ms(),
             "interval_sec": self.interval,
             "next_ts": self._next_ts,
             "rounds": self.rounds,

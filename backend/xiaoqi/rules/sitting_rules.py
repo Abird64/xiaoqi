@@ -110,7 +110,9 @@ def classify(metrics: dict, cfg) -> tuple[str, float, str]:
     """
     visible = int(metrics.get("visible_kpts", 0))
     if visible == 0:
-        return "away", 0.0, "no_person"
+        # 单帧没人 → unknown，不写 away。连续多帧没人才由调用方升级成 away，
+        # 否则构图差/逆光会被记成"人离开了"，直接污染 away 时长统计。
+        return "unknown", 0.0, "no_person"
     if visible < int(getattr(cfg, "sitting_min_visible_kpts", 4)):
         return "unknown", 0.0, f"too_few_kpts:{visible}"
     if metrics.get("edge_clipped"):
@@ -136,7 +138,8 @@ def classify(metrics: dict, cfg) -> tuple[str, float, str]:
 
 # reason code → 中文说明（给前端/报告直接用，避免在 JSON 里塞中英混排）
 REASON_TEXT: dict[str, str] = {
-    "no_person": "画面中没检测到人",
+    "no_person": "画面中没检测到人（仅一轮，暂不判定离开）",
+    "no_person_away": "连续两轮都没检测到人，判定为离开",
     "edge_clipped": "头部出画，角度不可信",
     "no_head_angle": "缺少算头部角度所需的点",
 }

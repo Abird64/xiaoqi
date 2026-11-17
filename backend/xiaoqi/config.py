@@ -38,7 +38,9 @@ class Config:
     dedup_window_sec: int = 60
     stale_sec: int = 900
     # ---- 坐姿抽检（2026-11-16：定期拍摄替代实时监测；模型换 Lightweight OpenPose）----
-    sitting_enabled: bool = True
+    # 默认关闭：抽检会**独占摄像头并停掉实时链**，干净的 clone 里没有模型权重，
+    # 默认开启只会让每次启动都刷一条 ERROR。开发机在 config.yaml 里显式开。
+    sitting_enabled: bool = False
     sitting_interval_sec: int = 60
     sitting_camera_index: int = 0
     sitting_lw_repo: str = ""          # 空 = 不启用（模型不可用时抽检线程直接不跑）

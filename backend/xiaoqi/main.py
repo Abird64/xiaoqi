@@ -38,25 +38,35 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
         hub.set_persist(store.write_event)
         app.state.store, app.state.cfg = store, cfg
 
-        source = (SimThread(cfg, hub, rules, machine, calib) if sim
-                  else CaptureThread(cfg, hub, rules, machine, calib))
-        source.start()
-        app.state.source = source
-        log.info("数据源已启动：%s", "模拟(--sim)" if sim else "摄像头")
-
         # ---- 坐姿抽检（2026-11-16：定期拍摄替代实时监测）----
+        # 两条链路**不能同时开**：`camera.py` 的实时链整个生命周期持有 cap，抽检又要
+        # 打开同一个 index —— Windows 上只有两种结局：抽检永远打不开，或实时链每 3 秒
+        # 报 POSE_LOST。抽检能跑起来就**不启实时链**（"抽检替代实时"的字面含义）；
+        # 抽检因模型未就绪跑不起来时退回实时链，降级而不是全黑。
         spot = None
-        if getattr(cfg, "sitting_enabled", False):
+        if sim:
+            log.info("--sim：坐姿抽检不启用（避免演示时占用真摄像头）")
+        elif getattr(cfg, "sitting_enabled", False):
+            # 模型加载是同步的（torch import + 88MB 权重），放在这里会阻塞启动数秒
             spot = SpotCheckThread(cfg, store=store, hub=hub)
             app.state.spot = spot
-            if spot.estimator.ok:
-                spot.start()
-                log.info("坐姿抽检已启动：每 %ss 一次，摄像头 #%s",
-                         spot.interval, spot.camera_index)
-            else:
-                log.error("坐姿抽检未启动（模型不可用）：%s", spot.last_error)
+            if not spot.estimator.ok:
+                log.error("坐姿抽检不可用（模型未就绪），回退到实时链路：%s",
+                          spot.last_error)
         else:
             log.info("坐姿抽检未启用（config.yaml 的 sitting.enabled=false）")
+
+        source = None
+        if spot is None or not spot.estimator.ok:
+            source = (SimThread(cfg, hub, rules, machine, calib) if sim
+                      else CaptureThread(cfg, hub, rules, machine, calib))
+            source.start()
+            log.info("数据源已启动：%s", "模拟(--sim)" if sim else "摄像头")
+        else:
+            spot.start()
+            log.info("坐姿抽检已启动：每 %ss 一次，摄像头 #%s（实时链已停用）",
+                     spot.interval, spot.camera_index)
+        app.state.source = source
 
         async def heartbeat():
             while True:
@@ -72,11 +82,16 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
             yield
         finally:
             hb.cancel()
+            # 只有真正 start() 过的线程才 join：模型缺失时抽检线程从未启动，
+            # 无条件 join 会抛 RuntimeError 把整个关闭流程带崩（TestClient 直接报错）。
             if spot is not None:
                 spot.stop()
-                spot.join(timeout=3)
-            source.stop()
-            source.join(timeout=3)
+                if spot.is_alive():
+                    spot.join(timeout=3)
+            if source is not None:
+                source.stop()
+                if source.is_alive():
+                    source.join(timeout=3)
             store.close()
             log.info("已关闭")
 
@@ -158,9 +173,14 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
     async def sitting_history(
         from_: int | None = Query(None, alias="from"),
         to: int | None = Query(None, alias="to"),
-        limit: int = 200,
+        # 60s 一条 → 一天 1440 条。默认值必须覆盖一天，否则出日报时会被静默截断
+        # 成最近 200 条（约 3.3 小时）而调用方看不出少了。
+        limit: int = 2000,
     ):
-        """按 ts 升序返回历史抽检记录（人机课 M2 报告的数据来源）。"""
+        """按 ts 升序返回历史抽检记录（人机课 M2 报告的数据来源）。
+
+        `truncated=true` 表示被 limit 截断了，报告里必须说明统计窗口。
+        """
         store: Store = app.state.store
         t = to or now_ms()
         f = from_ if from_ is not None else t - HISTORY_MAX_RANGE_MS
@@ -168,7 +188,8 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
             raise HTTPException(status_code=400, detail="RANGE_TOO_WIDE")
         rows = store.query(f, t, "sitting", limit)
         rows.reverse()                      # store 返回倒序，对外统一升序
-        return {"v": 1, "from": f, "to": t, "count": len(rows), "items": rows}
+        return {"v": 1, "from": f, "to": t, "count": len(rows),
+                "truncated": len(rows) >= limit, "items": rows}
 
     @app.post("/api/sitting/check")
     async def sitting_check():
@@ -187,6 +208,9 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
         spot = getattr(app.state, "spot", None)
         return {"ok": True, "version": "0.1.0", "clients": hub.client_count,
                 "calibrated": calib.done, "sim": sim,
+                # 抽检可用时实时链不启动（同一摄像头不能双开），这里显式暴露，
+                # 免得运维看到"没有 pose 推送"以为是摄像头坏了
+                "realtime": getattr(app.state, "source", None) is not None,
                 "sitting": {
                     "enabled": spot is not None,
                     "model_ready": bool(spot and spot.estimator.ok),
