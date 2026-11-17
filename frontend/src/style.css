@@ -43,6 +43,7 @@ body {
 /* 隐形态：只留恢复钮 */
 .hud.is-stealth .hud-toolbar,
 .hud.is-stealth .hud-steps,
+.hud.is-stealth .hud-check,
 .hud.is-stealth .hud-partner,
 .hud.is-stealth .hud-fps,
 .hud.is-stealth .hud-toast {
@@ -151,6 +152,37 @@ body {
 .hud-steps[data-tone="idle"] .hud-steps-value {
   font-size: 16px;
   color: var(--hud-idle);
+}
+
+/* ---- 左下：坐姿抽检行（XQ-012；60s 一次，独立于伙伴状态，不覆盖它） ---- */
+.hud-check {
+  position: absolute;
+  left: 14px;
+  bottom: 152px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 6px 11px;
+  border-radius: 10px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-check-label {
+  letter-spacing: 0.06em;
+  color: var(--hud-dim);
+}
+
+.hud-check[data-tone="warn"] .hud-check-value {
+  color: var(--hud-warn);
+}
+
+.hud-check[data-tone="ok"] .hud-check-value {
+  color: var(--hud-ok);
 }
 
 /* ---- 左下：伙伴状态卡 ---- */

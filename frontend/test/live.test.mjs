@@ -87,6 +87,7 @@ function setup(overrides = {}) {
     onStatus: (status, detail) => events.push(['status', status, detail?.reason]),
     onHello: (msg) => events.push(['hello', msg]),
     onState: (msg) => events.push(['state', msg]),
+    onSitting: (msg) => events.push(['sitting', msg]),
     onReminder: (msg) => events.push(['reminder', msg]),
     onError: (err) => events.push(['error', String(err?.message || err)]),
     ...overrides,
@@ -119,6 +120,21 @@ test('state 与 reminder 分发；ping 不打扰上层；未知类型忽略', ()
     events.slice(1).map((e) => e[0]),
     ['state', 'reminder']
   );
+});
+
+// 抽检帧必须落到 onSitting：喂给 onState 就会把 60s 一次的单帧绝对阈值
+// 当成实时状态，覆盖伙伴状态卡 —— 这正是后端改用独立 type 的原因。
+test('sitting 帧走 onSitting，不污染 state', () => {
+  const { events, sockets } = setup();
+  sockets[0].open();
+  sockets[0].send({ type: 'state', pose: { state: 'upright' } });
+  sockets[0].send({ type: 'sitting', ts: 1, sitting: { ok: true, state: 'slouch' } });
+
+  assert.deepEqual(
+    events.slice(1).map((e) => e[0]),
+    ['state', 'sitting']
+  );
+  assert.equal(events[2][1].sitting.state, 'slouch');
 });
 
 test('非法 JSON 只报错，不断连接', () => {

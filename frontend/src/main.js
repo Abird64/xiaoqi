@@ -136,9 +136,15 @@ function applyPose(pose) {
   if (pose && typeof pose === 'object' && pose.state) hud.setState(pose.state);
 }
 
+function applySitting(msg) {
+  // 坐姿抽检：单帧绝对阈值结果，只喂 HUD 的抽检行，不进伙伴状态
+  hud.setSitting(msg);
+}
+
 function applyHello(msg) {
   if ('phone' in msg) phone = msg.phone ?? null; // 全量快照：没有 phone 就是没有手机数据
   applyPose(msg.pose);
+  if ('sitting' in msg) applySitting(msg); // 快照里没有抽检结果时也只刷新抽检行
   renderPhone();
 }
 
@@ -187,6 +193,7 @@ const live = liveEnabled
       onStatus: handleStatus,
       onHello: applyHello,
       onState: applyState,
+      onSitting: applySitting,
       onReminder: handleReminder,
     })
   : null;

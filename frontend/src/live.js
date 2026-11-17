@@ -35,6 +35,7 @@ export const DEFAULT_RECONNECT_MAX_MS = 30_000;
  * @param {(status: 'connecting'|'open'|'closed', detail?: object) => void} [opts.onStatus]
  * @param {(msg: any) => void} [opts.onHello]
  * @param {(msg: any) => void} [opts.onState]
+ * @param {(msg: any) => void} [opts.onSitting]
  * @param {(msg: any) => void} [opts.onReminder]
  * @param {(err: any) => void} [opts.onError]
  */
@@ -50,6 +51,7 @@ export function createLive({
   onStatus = () => {},
   onHello = () => {},
   onState = () => {},
+  onSitting = () => {},
   onReminder = () => {},
   onError = () => {},
 } = {}) {
@@ -147,6 +149,11 @@ export function createLive({
         break;
       case 'state':
         onState(msg);
+        break;
+      // 坐姿抽检（XQ-012）：60s 一次、绝对阈值判定，**不是**实时状态。
+      // 后端刻意用独立类型推送，客户端也必须分开处理，不能喂给 onState。
+      case 'sitting':
+        onSitting(msg);
         break;
       case 'reminder':
         onReminder(msg);
