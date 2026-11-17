@@ -4,13 +4,14 @@
  *
  * 结构（照参考图截图）：
  *   - 左上：演示工具条 10 钮（视角方式/电脑设置/配置/导入/隐形/镜子/日历/水杯/监视/相机）
- *   - 左下：今日步数卡（XQ-006 手机同步）+ 伙伴状态卡（正直（健康）式样 + 状态点）
+ *   - 左下：今日步数卡（XQ-006 手机同步）+ 坐姿抽检行（XQ-012）+ 伙伴状态卡（正直（健康）式样 + 状态点）
  *   - 右上：FPS（M3-6 取证用，小且淡）
  *   - 底部中间：toast（演示占位提示，1.6s 自灭）
  *
  * 数据契约：来自后端的文案一律 textContent 写入，不用 innerHTML（防注入）。
  * 伙伴状态与步数由 main.js 接 WS 后驱动（XQ-006）；setState / setSteps / setConnected
  * 只接收「已经算好的展示文案」，三态判定在 steps.js 里，HUD 不认识协议字段。
+ * 抽检行（setSitting）是 XQ-012 的独立通路：60s 一次、单帧绝对阈值，不参与状态机。
  */
 
 /** 伙伴状态枚举 → 展示文案 + 状态点色调（与后端 machine.py 6 值枚举对齐） */
@@ -47,6 +48,10 @@ export function createHud({ onTool, initialState = 'upright', showToolbar = true
       </span>
       <span class="hud-steps-note" data-hud="steps-note">等待手机同步</span>
     </div>
+    <div class="hud-check" data-hud="check" data-tone="idle">
+      <span class="hud-check-label">坐姿抽检</span>
+      <span class="hud-check-value" data-hud="check-value">等待首次抽检</span>
+    </div>
     <div class="hud-partner" data-hud="partner">
       <span class="hud-dot is-idle" data-hud="dot"></span>
       <span class="hud-partner-body">
@@ -67,6 +72,8 @@ export function createHud({ onTool, initialState = 'upright', showToolbar = true
   const stepsNoteEl = root.querySelector('[data-hud="steps-note"]');
   const partnerEl = root.querySelector('[data-hud="partner"]');
   const dotEl = root.querySelector('[data-hud="dot"]');
+  const checkEl = root.querySelector('[data-hud="check"]');
+  const checkValueEl = root.querySelector('[data-hud="check-value"]');
   const stateEl = root.querySelector('[data-hud="state"]');
   const fpsEl = root.querySelector('[data-hud="fps"]');
   const toastEl = root.querySelector('[data-hud="toast"]');
@@ -125,6 +132,33 @@ export function createHud({ onTool, initialState = 'upright', showToolbar = true
     /** 是否已连上数据源（XQ-006 接 WS 后调用；当前只切样式类） */
     setConnected(connected) {
       partnerEl.classList.toggle('is-live', Boolean(connected));
+    },
+    /**
+     * 坐姿抽检结果（XQ-012）：60 秒一次、绝对阈值判定，**不是**伙伴的实时状态。
+     * 后端刻意用独立 `type:"sitting"` 推送，就是为了不覆盖 setState；这里同理，
+     * 只写自己这一行，绝不回头改伙伴状态卡。
+     *
+     * 入参是整条 WS 消息：`{ type:'sitting', ts, sitting:{ ok, state, confidence,
+     * reason, reason_text, ts, error } }`；hello 快照里直接是 `{ ts, sitting }`。
+     * 未知/非枚举状态按原文显示（协议向后兼容），失败显示「抽检失败」并把原因挂 title。
+     */
+    setSitting(msg) {
+      const r = (msg && (msg.sitting || msg)) || {};
+      const ts = Number(r.ts ?? msg?.ts);
+      if (r.ok === false || !r.state) {
+        checkEl.dataset.tone = 'idle';
+        checkValueEl.textContent = r.error ? '抽检失败' : '等待首次抽检';
+        checkEl.title = r.error || '';
+        return;
+      }
+      const s = STATE_MAP[r.state];
+      const conf = Number(r.confidence);
+      const pct = Number.isFinite(conf) && conf > 0 ? `${Math.round(conf * 100)}%` : '—';
+      // 用抓拍时刻，不用「现在」：最新一条可能是几分钟前的，界面不能骗人
+      const hms = Number.isFinite(ts) ? new Date(ts).toTimeString().slice(0, 8) : '--:--:--';
+      checkEl.dataset.tone = s ? s.tone : 'idle';
+      checkValueEl.textContent = `${hms} · ${s ? s.text : r.state} · ${pct}`;
+      checkEl.title = r.reason_text || '';
     },
     /**
      * 今日步数三态（XQ-006）。只吃 steps.js 算好的展示字段：

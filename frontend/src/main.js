@@ -23,11 +23,15 @@
  */
 import * as THREE from 'three';
 import './style.css';
+import { NAME } from './scene/materials.js';
 import { createRoom } from './scene/room.js';
 import { createPartner, PARTNER_STATES } from './scene/partner.js';
 import { createViewer } from './viewer.js';
 import { createHud } from './hud.js';
+import { createCalendarFace } from './scene/calendarFace.js';
+import { createLive } from './live.js';
 import { setupStudio } from './studio.js';
+import { describePhone } from './steps.js';
 
 const params = new URLSearchParams(location.search);
 // 数值型 URL 参数：缺省 / 非数字 → undefined（沿用默认机位）
@@ -136,9 +140,15 @@ function applyPose(pose) {
   if (pose && typeof pose === 'object' && pose.state) hud.setState(pose.state);
 }
 
+function applySitting(msg) {
+  // 坐姿抽检：单帧绝对阈值结果，只喂 HUD 的抽检行，不进伙伴状态
+  hud.setSitting(msg);
+}
+
 function applyHello(msg) {
   if ('phone' in msg) phone = msg.phone ?? null; // 全量快照：没有 phone 就是没有手机数据
   applyPose(msg.pose);
+  if ('sitting' in msg) applySitting(msg); // 快照里没有抽检结果时也只刷新抽检行
   renderPhone();
 }
 
@@ -187,6 +197,7 @@ const live = liveEnabled
       onStatus: handleStatus,
       onHello: applyHello,
       onState: applyState,
+      onSitting: applySitting,
       onReminder: handleReminder,
     })
   : null;
