@@ -23,11 +23,15 @@
  */
 import * as THREE from 'three';
 import './style.css';
+import { NAME } from './scene/materials.js';
 import { createRoom } from './scene/room.js';
 import { createPartner, PARTNER_STATES } from './scene/partner.js';
 import { createViewer } from './viewer.js';
 import { createHud } from './hud.js';
+import { createCalendarFace } from './scene/calendarFace.js';
+import { createLive } from './live.js';
 import { setupStudio } from './studio.js';
+import { describePhone } from './steps.js';
 
 const params = new URLSearchParams(location.search);
 // 数值型 URL 参数：缺省 / 非数字 → undefined（沿用默认机位）
