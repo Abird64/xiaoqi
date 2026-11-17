@@ -8,7 +8,7 @@
 
 <p>
 <img alt="status" src="https://img.shields.io/badge/status-M1--开发中-brightgreen">
-<img alt="platform" src="https://img.shields.io/badge/platform-Windows-blue">
+<img alt="platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue">
 <img alt="stack" src="https://img.shields.io/badge/stack-Python%20%2B%20Three.js-informational">
 <img alt="license" src="https://img.shields.io/badge/license-TBD-lightgrey">
 </p>
@@ -23,7 +23,7 @@
 
 小栖换了一个思路：不做一个「检测驼背的工具」，而是做一个**可以住进去的房间**。
 
-- 摄像头感知你的姿态，房间里的健康伙伴**即时反应**——驼背时蔫下来，坐直了精神起来，起身活动时舒展身体；
+- 摄像头定期抽检你的姿态，房间里的健康伙伴**随之反应**——驼背时蔫下来，坐直了精神起来，起身活动时舒展身体；
 - 电脑使用行为（前台应用 / 时长）、手机步数等数据同样在房间里**被看见**，而不是变成一条曲线；
 - 提醒不是弹窗，而是角色的**行动与表情**。
 
@@ -37,7 +37,7 @@
 
 | 优先级 | 功能 | 说明 |
 |---|---|---|
-| **P0 必做** | 姿态感知 | 摄像头实时估计人体关键点，判定姿态状态（坐直 / 驼背 / 伏案 / 起身 / 喝水） |
+| **P0 必做** | 姿态感知 | 摄像头每 60s 抽一帧，Lightweight OpenPose 估计人体关键点，判定姿态状态（坐直 / 驼背 / 伏案 / 起身 / 喝水） |
 | **P0 必做** | 低多边形 3D 房间世界 | 卡通小房间（墙角 + 桌椅 + 电脑），健康伙伴形象随姿态状态变化 |
 | **P0 必做** | 状态驱动 | 状态机 + 有限套动画 + 过渡补间，**不**做逐帧骨骼绑定 |
 | **P1 重要** | 行为记录 | Windows 前台应用焦点 / 时长（本地轻量、无隐私风险），在房间中可视化回应 |
@@ -46,9 +46,11 @@
 
 ### 姿态判定逻辑（初步）
 
-- **指标**：以头前倾角（耳垂—肩峰夹角）等客观几何量判定状态。
-- **判定**：超过阈值并持续 N 秒 → 切换到「驼背」等状态，健康伙伴相应表现。
-- **校准**：启动时引导「坐直」采集基准，得到个性化阈值。
+- **采样**：不做实时推理。抽检线程每 60 秒抓一帧摄像头画面，用 Lightweight OpenPose（CPU，单帧 0.1–0.3 s，见 D-014 性能记录）出 18 个关键点。
+- **指标**：以头前倾角（颈→耳与竖直夹角）、躯干前倾角等客观几何量判定状态；关键点缺哪个就少算哪个，不硬凑骨架。
+- **判定**：超过阈值（默认头前倾 ≥ 58° → 驼背；躯干前倾 ≥ 20° → 伏案）即判为对应状态，健康伙伴相应表现。
+- **与 `pose_state` 六枚举的关系**：抽检复用同一套枚举词汇，实际产出 `unknown` / `upright` / `slouch` / `desk_hunch` / `away` 五个（`drinking` 不在抽检判定内），走**独立通路** `type:"sitting"`，**不进状态机**——没有防抖 / 滞回 / 持续时长统计，也不与实时状态合并统计。真机模式下没有输入驱动状态机，`type:"state"` 只由 `--sim` 的模拟通路产生，供前端开发。
+- **校准**：启动时引导「坐直」采集基准是 M2 的目标；当前抽检判定用绝对阈值，尚未接入校准。
 
 > ⚠️ 阈值调校是唯一硬骨头，容易误报 / 漏报，需要留足实测时间。
 
@@ -65,7 +67,7 @@
                        │ WebSocket 实时推状态 / HTTP 接口收手机上报
 ┌──────────────────────▼───────────────────────────────────┐
 │  计算层（后端 · Python）                                  │
-│  FastAPI + MediaPipe + 状态机 + 提醒调度 + SQLite         │
+│  FastAPI + LW 姿态抽检 + 状态机 + 提醒调度 + SQLite      │
 └──────────────────────┬───────────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────────┐
@@ -79,13 +81,13 @@
 
 | 层 | 选型 |
 |---|---|
-| 感知（姿态） | MediaPipe BlazePose / MoveNet（CPU 可跑，无需 GPU） |
-| 感知（行为） | pywin32 / psutil（Windows 前台应用） |
+| 感知（姿态） | Lightweight OpenPose（CPU，640×480 单帧 114 ms / height 384 时 273 ms，60s 周期抽检） |
+| 感知（行为） | pywin32 / psutil（Windows 前台应用）；Linux 用 X11 `XGetInputFocus` / `xdotool`（Wayland 需 `xdg-desktop-portal`，未落地，见 D-015） |
 | 感知（手机） | 系统健康库 + 系统现成工具，**零客户端开发**：电脑端暴露带配对令牌的 `POST /api/ingest/health`，手机侧用 iOS 快捷指令 / Android HTTP Shortcuts 读步数并上报；「静止时长」由步数序列差分推断，不额外申请权限 |
 | 后端 | Python + FastAPI + WebSocket |
 | 前端 | Three.js + glTF low-poly 模型 + 动画片段混合（3D 优先；工期 / 性能不达标则降级 2.5D 等距精灵 + 视差，状态驱动内核不变） |
 | 存储 | SQLite（本地） |
-| 平台 | Windows 为主 + 外置 USB 摄像头 |
+| 平台 | Windows（组员机）/ Linux（本机 Ubuntu · Wayland 开发与验收）+ 外置 USB 摄像头 |
 
 > 选择 Web 前端的原因：多媒体展示的舞台在前端，「花哨 / 打破常规布局」比桌面程序容易做，
 > 也更贴合「非普通软件」的气质。
@@ -108,15 +110,38 @@
 **当前阶段：M1 · 工具导通（W4，骨架开工中）**
 
 - [x] 项目定名 **小栖**，一句话需求 **陪伴式集中展示多源健康数据**
-- [x] 平台确定 **Windows + 外置 USB 摄像头**
+- [x] 平台确定 **Windows / Linux 双端 + 外置 USB 摄像头**（D-015：一套实现，摄像头后端按平台自动选）
 - [x] 手机端接入路线定案：**协议优先、客户端零开发**（D-002）
 - [x] 文档分层定案：**GitHub 只留技术，进度/分工进腾讯文档**（D-006）
 - [x] 代码目录结构 + 单进程进程模型 + 交付形态（D-007）
 - [x] 四人方向重排：A 前端 / C 后端（D-008）
 - [x] 项目骨架落地（`backend/` 按 D-007 单进程事件总线）
+- [x] 姿态源收敛为 LW 抽检，只保留抽检链 + `--sim`（D-016）
 - [ ] 接口协议 v0.1 冻结（XQ-006，9/24）
 - [ ] M1 六条验收标准逐条跑通（真机）
 - [ ] 美术风格参考（low-poly / 粘土风，XQ-010）
+
+---
+
+## 本地运行（Windows / Linux 通用，命令按平台）
+
+```bash
+# —— 后端 ——
+cd backend
+python -m venv .venv                      # 只做一次
+# Linux:
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m xiaoqi --sim --port 8000    # 无摄像头：接口 + WS 全通
+.venv/bin/python -m xiaoqi --port 8000          # 真摄像头
+# Windows:
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python -m xiaoqi --sim --port 8000
+.venv\Scripts\python -m xiaoqi --port 8000
+```
+
+- 摄像头后端按平台自动选（Windows DSHOW → MSMF → ANY，Linux V4L2 → ANY），见 `backend/xiaoqi/vision/camera_util.py`；不要在业务代码里写 `CAP_*`。
+- 姿态只能来自坐姿抽检：`torch` + `torchvision` 与 LW 仓库、权重是**必需**依赖，步骤见 [`backend/models/README.md`](backend/models/README.md)。没准备好时后端照常起服务，但**没有姿态数据**（`GET /api/health` 的 `sitting.model_ready=false`、`pose_source=null`，`last_error` 写明缺哪一步；WS 客户端会收到 `POSE_UNAVAILABLE` 错误帧），不会降级到其它姿态源（D-016）；`--sim` 仍可无摄像头开发前端。
+- 前端：`cd frontend && npm install && npm run dev`（`?ws=ws://127.0.0.1:8000/ws` 指向后端）。
 
 ---
 

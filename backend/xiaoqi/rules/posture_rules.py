@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 from ..config import Config
 
-# MediaPipe BlazePose 33 关键点索引
+# 33 点索引约定（沿用 BlazePose 编号；--sim 合成点与校准链路按这套编号）
 NOSE, LEFT_EAR, RIGHT_EAR = 0, 7, 8
 LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 LEFT_HIP, RIGHT_HIP = 23, 24

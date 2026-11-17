@@ -1,13 +1,13 @@
 """Lightweight OpenPose 推理封装（bottom-up，CPU 可跑）。
 
-**为什么用它替掉 MediaPipe**（2026-11 实测，四张样图逐张核对）：
-  MediaPipe BlazePose 是 top-down：先框人、再在框内回归 33 点，看不见的点也会
+**为什么用它替掉旧的 top-down 方案**（2026-11 实测，四张样图逐张核对）：
+  旧的 BlazePose 方案是 top-down：先框人、再在框内回归 33 点，看不见的点也会
   "猜"一个出来 —— 实测侧面时位置偏移但 visibility 仍为 1.00，肩线角算出 63~132°。
   Lightweight OpenPose 是 bottom-up：先出所有关键点、再用 PAF 连成人，连不上就不连，
   **关键点位置肉眼核对全部贴位**，且 18 点里自带 `neck`（索引 1）——
   算头前倾最需要的锚点，COCO 17 点和 BlazePose 都没有。
 
-对外接口（与旧 MediaPipe 版本保持同样的调用方式）：
+对外接口（与旧版保持同样的调用方式）：
     est = LWPoseEstimator(repo_dir, checkpoint)
     people = est.infer(frame_bgr)     # -> [{"pts": {idx: (x, y, score)}, "score": 0.8}, ...]
     est.close()
@@ -32,10 +32,23 @@ NUM_KPTS = 18
 
 # 索引常量（写指标时别记错）
 NOSE, NECK = 0, 1
-R_SHO, L_SHO = 2, 5
-R_HIP, L_HIP = 8, 11
+R_SHO, R_ELB, R_WRI = 2, 3, 4
+L_SHO, L_ELB, L_WRI = 5, 6, 7
+R_HIP, R_KNEE, R_ANK = 8, 9, 10
+L_HIP, L_KNEE, L_ANK = 11, 12, 13
 R_EYE, L_EYE = 14, 15
 R_EAR, L_EAR = 16, 17
+
+# 18 点骨架连线（成对索引），用于把检测结果画回图上做肉眼核对
+SKELETON = [
+    (NECK, NOSE),
+    (NOSE, R_EYE), (R_EYE, R_EAR),
+    (NOSE, L_EYE), (L_EYE, L_EAR),
+    (NECK, R_SHO), (R_SHO, R_ELB), (R_ELB, R_WRI),
+    (NECK, L_SHO), (L_SHO, L_ELB), (L_ELB, L_WRI),
+    (NECK, R_HIP), (R_HIP, R_KNEE), (R_KNEE, R_ANK),
+    (NECK, L_HIP), (L_HIP, L_KNEE), (L_KNEE, L_ANK),
+]
 
 STRIDE, UPSAMPLE = 8, 4
 
@@ -66,6 +79,22 @@ def pad_width(img, stride, pad_value, min_dims):
     padded = cv2.copyMakeBorder(img, pad[0], pad[2], pad[1], pad[3],
                                 cv2.BORDER_CONSTANT, value=pad_value)
     return padded, pad
+
+
+def draw_skeleton(img, pts: dict, color=(80, 220, 80), thickness: int = 2):
+    """在 BGR 图上画 18 点骨架；`pts` 为 {idx: (x, y, score)}（像素坐标）。
+
+    只画两端都检测到的连线，缺失点自然断开，不会凭空连线。
+    """
+    import cv2
+
+    for a, b in SKELETON:
+        pa, pb = pts.get(a), pts.get(b)
+        if pa is None or pb is None:
+            continue
+        cv2.line(img, (int(pa[0]), int(pa[1])), (int(pb[0]), int(pb[1])),
+                 color, thickness, cv2.LINE_AA)
+    return img
 
 
 class LWPoseEstimator:
@@ -140,7 +169,7 @@ class LWPoseEstimator:
 
         单帧异常返回空列表，不抛出（M1-6 精神）。
         """
-        if not self.ok or self._net is None:
+        if not self.ok or self._net is None or frame_bgr is None:
             return []
         try:
             import cv2

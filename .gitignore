@@ -9,9 +9,10 @@ secrets/
 # ---- Python / 后端 ----
 __pycache__/
 *.py[cod]
-.venv/
-venv/
-env/
+# 不带斜杠：既匹配目录，也匹配 worktree 里指向主 venv 的软链接
+.venv
+venv
+env
 *.egg-info/
 .pytest_cache/
 .mypy_cache/

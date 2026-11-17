@@ -18,7 +18,7 @@ from .rules.calibration import Calibration
 from .rules.posture_rules import PostureRules
 from .state.machine import PoseStateMachine
 from .store.db import Store
-from .vision.camera import CaptureThread, SimThread
+from .vision.camera import SimThread
 from .vision.spot_check import SpotCheckThread
 
 log = logging.getLogger("xiaoqi.main")
@@ -38,34 +38,34 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
         hub.set_persist(store.write_event)
         app.state.store, app.state.cfg = store, cfg
 
-        # ---- 坐姿抽检（2026-11-16：定期拍摄替代实时监测）----
-        # 两条链路**不能同时开**：`camera.py` 的实时链整个生命周期持有 cap，抽检又要
-        # 打开同一个 index —— Windows 上只有两种结局：抽检永远打不开，或实时链每 3 秒
-        # 报 POSE_LOST。抽检能跑起来就**不启实时链**（"抽检替代实时"的字面含义）；
-        # 抽检因模型未就绪跑不起来时退回实时链，降级而不是全黑。
+        # ---- 姿态源（D-016：抽检是唯一真实姿态源，没有 MediaPipe 实时链可退）----
+        # `--sim` 只吐合成数据、不碰摄像头；真机模式要么抽检能跑，要么就没有姿态数据，
+        # 必须把原因喊出来（前端 POSE_UNAVAILABLE），不能假装画面里没人。
         spot = None
         if sim:
-            log.info("--sim：坐姿抽检不启用（避免演示时占用真摄像头）")
+            log.info("--sim：坐姿抽检不启用（演示用合成数据，不占真摄像头）")
         elif getattr(cfg, "sitting_enabled", False):
             # 模型加载是同步的（torch import + 88MB 权重），放在这里会阻塞启动数秒
             spot = SpotCheckThread(cfg, store=store, hub=hub)
             app.state.spot = spot
-            if not spot.estimator.ok:
-                log.error("坐姿抽检不可用（模型未就绪），回退到实时链路：%s",
-                          spot.last_error)
         else:
             log.info("坐姿抽检未启用（config.yaml 的 sitting.enabled=false）")
 
         source = None
-        if spot is None or not spot.estimator.ok:
-            source = (SimThread(cfg, hub, rules, machine, calib) if sim
-                      else CaptureThread(cfg, hub, rules, machine, calib))
+        if sim:
+            source = SimThread(cfg, hub, rules, machine, calib)
             source.start()
-            log.info("数据源已启动：%s", "模拟(--sim)" if sim else "摄像头")
-        else:
+            log.info("数据源已启动：模拟(--sim)")
+        elif spot is not None and spot.estimator.ok:
             spot.start()
-            log.info("坐姿抽检已启动：每 %ss 一次，摄像头 #%s（实时链已停用）",
+            log.info("坐姿抽检已启动：每 %ss 一次，摄像头 #%s",
                      spot.interval, spot.camera_index)
+        else:
+            reason = (spot.last_error if spot is not None
+                      else "坐姿抽检未启用（sitting.enabled=false）")
+            log.error("没有可用的姿态源：%s", reason)
+            hub.publish_threadsafe({
+                "type": "error", "code": "POSE_UNAVAILABLE", "message": reason})
         app.state.source = source
 
         async def heartbeat():
@@ -126,10 +126,12 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
     # ---------- 只读查询 ----------
     @app.get("/api/state")
     async def get_state():
+        spot = getattr(app.state, "spot", None)
         return {"v": 1, "type": "state", "ts": now_ms(), **hub.snapshot(),
-                "capabilities_ready": {"calibrated": calib.done,
-                                       "camera_error": getattr(
-                                           app.state.source, "last_error", None)}}
+                "capabilities_ready": {
+                    "calibrated": calib.done,
+                    "camera_error": (getattr(app.state.source, "last_error", None)
+                                     or (spot.last_error if spot else None))}}
 
     @app.get("/api/history")
     async def get_history(
@@ -208,9 +210,10 @@ def create_app(cfg: Config | None = None, sim: bool = False) -> FastAPI:
         spot = getattr(app.state, "spot", None)
         return {"ok": True, "version": "0.1.0", "clients": hub.client_count,
                 "calibrated": calib.done, "sim": sim,
-                # 抽检可用时实时链不启动（同一摄像头不能双开），这里显式暴露，
-                # 免得运维看到"没有 pose 推送"以为是摄像头坏了
-                "realtime": getattr(app.state, "source", None) is not None,
+                # D-016：真实姿态只来自抽检；"sim" 是 --sim 合成数据，None = 没有姿态源
+                "pose_source": ("sim" if sim else
+                                ("spot_check" if spot is not None and spot.estimator.ok
+                                 else None)),
                 "sitting": {
                     "enabled": spot is not None,
                     "model_ready": bool(spot and spot.estimator.ok),

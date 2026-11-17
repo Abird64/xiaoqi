@@ -1,4 +1,4 @@
-"""摄像头采集线程 + `--sim` 模拟线程（两者对外接口一致）。
+"""`--sim` 模拟线程（D-016：真实摄像头只走坐姿抽检，本文件不再有实时采集链）。
 
 铁律：本线程**只算不发**，事件一律 `hub.publish_threadsafe`。
 """
@@ -13,7 +13,6 @@ from ..hub import Hub
 from ..rules.calibration import Calibration
 from ..rules.posture_rules import PoseObservation, PostureRules, compute_metrics
 from ..state.machine import PoseStateMachine
-from .pose_estimator import PoseEstimator
 
 log = logging.getLogger("xiaoqi.camera")
 
@@ -65,62 +64,6 @@ class _BaseThread(threading.Thread):
 
     def _sleep(self) -> None:
         self._stop_event.wait(1.0 / self.cfg.sample_hz)
-
-
-class CaptureThread(_BaseThread):
-    """真实链路：USB 摄像头 → MediaPipe → 判定 → 状态机 → Hub（M1-1/1-2/1-3）。"""
-
-    def __init__(self, *a, estimator: PoseEstimator | None = None, **kw) -> None:
-        super().__init__(*a, **kw)
-        self.estimator = estimator or PoseEstimator(self.cfg)
-
-    def run(self) -> None:
-        # 姿态链起不来要"喊出来"，不能假装画面里没人（否则前端只会看到 unknown）
-        if not self.estimator.ok:
-            self.last_error = self.estimator.last_error or "姿态估计不可用"
-            log.error("姿态估计不可用：%s", self.last_error)
-            self.hub.publish_threadsafe({
-                "type": "error", "code": "POSE_UNAVAILABLE",
-                "message": self.last_error,
-            })
-            return
-
-        cap = None
-        while not self._stop_event.is_set():
-            try:
-                if cap is None:
-                    import cv2
-                    cap = cv2.VideoCapture(self.cfg.camera_index)
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cfg.camera_width)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cfg.camera_height)
-                    if not cap.isOpened():
-                        raise RuntimeError(f"摄像头 {self.cfg.camera_index} 打不开")
-                    log.info("摄像头已打开 #%s", self.cfg.camera_index)
-
-                ok, frame = cap.read()
-                if not ok:
-                    raise RuntimeError("摄像头断流")   # → M1-6：报错但不崩
-                # 降采样靠 _sleep() 控制在 sample_hz（默认 10Hz），
-                # 摄像头 30fps 多出的帧由驱动缓冲丢弃，CPU 不空转。
-                self._on_observation(self.estimator.infer(frame))
-                self.last_error = None
-                self._sleep()
-            except Exception as e:                       # 断流 / 拔线 → 报错 + 重连
-                self.last_error = str(e)
-                log.warning("采集异常，3 秒后重试：%s", e)
-                self.hub.publish_threadsafe(
-                    {"type": "error", "code": "POSE_LOST", "message": str(e)})
-                if cap is not None:
-                    try:
-                        cap.release()
-                    except Exception:
-                        pass
-                    cap = None
-                self._stop_event.wait(3.0)
-        if cap is not None:
-            cap.release()
-        self.estimator.close()
-        log.info("采集线程已停止")
 
 
 class SimThread(_BaseThread):
