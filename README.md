@@ -42,7 +42,7 @@
 | **P0 必做** | 状态驱动 | 状态机 + 有限套动画 + 过渡补间，**不**做逐帧骨骼绑定 |
 | **P1 重要** | 行为记录 | Windows 前台应用焦点 / 时长（本地轻量、无隐私风险），在房间中可视化回应 |
 | **P1 重要** | 定时健康提醒 | 喝水 / 久坐，以角色的「行动 / 表情」而非弹窗提醒 |
-| **P2 增强** | 手机多源数据 | 步数 / 静止状态，经手机零开发同步到程序 |
+| **P2 增强** | 手机多源数据 | 步数 / 静止状态，经 Android App（[`android/`](android/README.md)）上报同步到程序 |
 
 ### 姿态判定逻辑（初步）
 
@@ -73,7 +73,7 @@
 ┌──────────────────────▼───────────────────────────────────┐
 │  输入源（三路数据）                                        │
 │  ① 外置 USB 摄像头 → 姿态   ② Windows 前台应用 → 行为      │
-│  ③ 手机健康库 → 步数（HTTP 上报，零客户端开发）             │
+│  ③ Android App → 步数（HTTP 上报）                           │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -83,7 +83,7 @@
 |---|---|
 | 感知（姿态） | Lightweight OpenPose（CPU，640×480 单帧 114 ms / height 384 时 273 ms，60s 周期抽检） |
 | 感知（行为） | pywin32 / psutil（Windows 前台应用）；Linux 用 X11 `XGetInputFocus` / `xdotool`（Wayland 需 `xdg-desktop-portal`，未落地，见 D-015） |
-| 感知（手机） | 系统健康库 + 系统现成工具，**零客户端开发**：电脑端暴露带配对令牌的 `POST /api/ingest/health`，手机侧用 iOS 快捷指令 / Android HTTP Shortcuts 读步数并上报；「静止时长」由步数序列差分推断，不额外申请权限 |
+| 感知（手机） | Android 原生 App（[`android/`](android/README.md)，D-009）：`TYPE_STEP_COUNTER` → `POST /api/ingest/health`（`source=android-app`，60s 幂等）；手机应用时长未实现 |
 | 后端 | Python + FastAPI + WebSocket |
 | 前端 | Three.js + glTF low-poly 模型 + 动画片段混合（3D 优先；工期 / 性能不达标则降级 2.5D 等距精灵 + 视差，状态驱动内核不变） |
 | 存储 | SQLite（本地） |
@@ -111,7 +111,8 @@
 
 - [x] 项目定名 **小栖**，一句话需求 **陪伴式集中展示多源健康数据**
 - [x] 平台确定 **Windows / Linux 双端 + 外置 USB 摄像头**（D-015：一套实现，摄像头后端按平台自动选）
-- [x] 手机端接入路线定案：**协议优先、客户端零开发**（D-002）
+- [x] 手机端接入路线：D-002 协议优先；D-009 改为 **Android 原生 App**（[`android/`](android/README.md)，当前实现步数链路）
+- [x] Android 步数 App 工程落地：前台计步、`POST /api/ingest/health`、开机/Job 兜底、真机验收清单
 - [x] 文档分层定案：**GitHub 只留技术，进度/分工进腾讯文档**（D-006）
 - [x] 代码目录结构 + 单进程进程模型 + 交付形态（D-007）
 - [x] 四人方向重排：A 前端 / C 后端（D-008）
@@ -142,6 +143,33 @@ python -m venv .venv                      # 只做一次
 - 摄像头后端按平台自动选（Windows DSHOW → MSMF → ANY，Linux V4L2 → ANY），见 `backend/xiaoqi/vision/camera_util.py`；不要在业务代码里写 `CAP_*`。
 - 姿态只能来自坐姿抽检：`torch` + `torchvision` 与 LW 仓库、权重是**必需**依赖，步骤见 [`backend/models/README.md`](backend/models/README.md)。没准备好时后端照常起服务，但**没有姿态数据**（`GET /api/health` 的 `sitting.model_ready=false`、`pose_source=null`，`last_error` 写明缺哪一步；WS 客户端会收到 `POSE_UNAVAILABLE` 错误帧），不会降级到其它姿态源（D-016）；`--sim` 仍可无摄像头开发前端。
 - 前端：`cd frontend && npm install && npm run dev`（`?ws=ws://127.0.0.1:8000/ws` 指向后端）。
+
+---
+
+## Android 手机端（W11）
+
+完整工程在 [`android/`](android/README.md)：统计当日步数，按协议 `POST /api/ingest/health`
+（`X-Xiaoqi-Token`、`source=android-app`）上报，电脑端房间通过现有 WebSocket 自动刷新。
+
+```powershell
+# 构建 APK（Windows：JDK 17 + Android SDK 34，无需 Gradle/联网）
+cd android
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-apk.ps1
+
+# 安装
+adb install -r release\xiaoqi-steps-1.0.0.apk
+```
+
+App 设置页填 `http://<电脑局域网 IP>:8000` 与后端控制台/`/api/token` 的令牌；手机与电脑需同一 Wi-Fi。
+没有摄像头/姿态依赖时，可用零依赖联调面板验证手机→网页链路：
+
+```powershell
+cd android
+python tools\dev_server.py --port 8765 --token xiaoqi-demo
+```
+
+已知边界：只做步数，`screen_minutes` / `top_apps` 未实现；APK 为调试签名；首次安装从 0 开始计步。
+详细说明、测试与真机验收清单见 [`android/README.md`](android/README.md) 和 [`android/docs/`](android/docs/README.md)。
 
 ---
 

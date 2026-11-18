@@ -1,0 +1,9 @@
+# 构建中间产物
+build/
+.gradle/
+local.properties
+*.iml
+.idea/
+
+# 调试签名（由 tools/build-apk.ps1 生成，不随源码分发）
+*.keystore

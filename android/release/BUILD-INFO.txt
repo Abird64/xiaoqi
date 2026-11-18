@@ -1,0 +1,13 @@
+小栖步数 Android APK
+versionName: 1.0.0
+versionCode: 1
+package: com.xiaoqi.steps
+builtAt: 2026-11-08 16:24:32 +08:00
+apk: release/xiaoqi-steps-1.0.0.apk
+size: 189887 bytes
+sha256: FE08BDF2CA7345D550230EF6D783FD480B41D5178592644D09029462836E6F18
+signing: debug (not for production)
+cert: SHA256: C4:2B:E2:2C:89:C0:97:6D:38:C5:21:A6:E8:52:F6:01:86:5F:0B:EF:1F:CB:70:5D:6F:78:83:05:49:07:1E:FF
+jdk: C:\Program Files\Java\jdk-17
+sdk: C:\Users\23950\AppData\Local\Android\Sdk
+build-tools: C:\Users\23950\AppData\Local\Android\Sdk\build-tools\34.0.0
